@@ -435,4 +435,5 @@ if __name__ == '__main__':
     
     # Runs the web server (for local testing)
     # Gunicorn will run this on Render
-    app.run(debug=True, port=5000)```
+    app.run(debug=True, port=5000)
+
