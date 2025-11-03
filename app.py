@@ -1,7 +1,9 @@
 import os
 import gspread
+import subprocess
+import shlex
+import json
 from flask import Flask, request, render_template_string, send_file
-from yt_dlp import YoutubeDL
 from datetime import datetime
 
 # --- Configuration ---
@@ -10,16 +12,25 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Path to your Google Sheets credentials
-# This will be 'credentials.json' on Render
 SERVICE_ACCOUNT_FILE = 'credentials.json'
-
-# The name of your Google Sheet
-# MAKE SURE you have shared this sheet with the service account email
 GOOGLE_SHEET_NAME = "MyDownloaderLog"
 
 # A folder to temporarily store downloads
-# Render uses a temporary filesystem, so this is fine.
 DOWNLOAD_FOLDER = 'temp_downloads'
+# Path for the cookies file that will be created from the environment variable
+COOKIE_FILE_PATH = '/tmp/cookies.txt'
+
+# --- RENDER DEPLOYMENT: Write cookies from environment variable to a file ---
+# This block runs once when the application starts.
+# It reads the YTDLP_COOKIES secret you set on Render and writes it to a file.
+cookies_env_var = os.environ.get("YTDLP_COOKIES")
+if cookies_env_var:
+    try:
+        with open(COOKIE_FILE_PATH, "w", encoding="utf-8") as f:
+            f.write(cookies_env_var)
+        print("Successfully created cookies file from environment variable.")
+    except Exception as e:
+        print(f"Error creating cookies file: {e}")
 
 # --- Google Sheets Setup ---
 try:
@@ -31,8 +42,7 @@ except Exception as e:
     print("Please ensure 'credentials.json' is correct and you shared the sheet.")
     sh = None
 
-# --- Frontend: HTML, CSS & JavaScript ---
-# We store the entire frontend in our Python file as a string.
+# --- Frontend: HTML, CSS & JavaScript (No changes needed here) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -203,30 +213,6 @@ HTML_TEMPLATE = """
             color: #555;
             text-align: center;
         }
-
-        /* --- RESPONSIVE DESIGN FOR MOBILE & TABLET --- */
-        @media (max-width: 600px) {
-            body {
-                align-items: flex-start; /* Align to top on mobile */
-                padding-top: 2rem;
-            }
-            .container {
-                padding: 1.5rem;
-                box-shadow: none;
-            }
-            h1 {
-                font-size: 1.8rem;
-            }
-            p {
-                font-size: 0.95rem;
-                margin-bottom: 1.5rem;
-            }
-            input[type="url"], button {
-                font-size: 1rem;
-                padding: 0.9rem;
-            }
-        }
-
     </style>
 </head>
 <body>
@@ -264,40 +250,27 @@ HTML_TEMPLATE = """
             const progressText = document.getElementById('progress-text');
             let progressInterval;
 
-            // Show/hide clear button based on input
             urlInput.addEventListener('input', function() {
-                if (urlInput.value.length > 0) {
-                    clearBtn.style.display = 'block';
-                } else {
-                    clearBtn.style.display = 'none';
-                }
+                clearBtn.style.display = urlInput.value.length > 0 ? 'block' : 'none';
             });
 
-            // Clear button functionality
             clearBtn.addEventListener('click', function() {
                 urlInput.value = '';
                 urlInput.focus();
                 clearBtn.style.display = 'none';
             });
             
-            // Handle form submission for progress bar
             form.addEventListener('submit', function(e) {
-                // Check if the URL is not empty
-                if (!urlInput.value) {
-                    return; // Let the browser handle the 'required' validation
-                }
+                if (!urlInput.value) return;
 
-                // Show the progress bar
                 progressWrapper.style.display = 'block';
-
-                // Simulate progress
                 let currentProgress = 0;
-                clearInterval(progressInterval); // Clear any existing interval
+                clearInterval(progressInterval);
                 
                 progressInterval = setInterval(() => {
-                    currentProgress += Math.random() * 5; // Increment progress randomly
+                    currentProgress += Math.random() * 5;
                     if (currentProgress > 95) {
-                        currentProgress = 95; // Don't reach 100% until download starts
+                        currentProgress = 95;
                         clearInterval(progressInterval);
                     }
                     progressBar.style.width = currentProgress + '%';
@@ -310,22 +283,31 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- NEW HELPER FUNCTION ---
-def guess_source_from_url(url):
-    """Simple helper to guess the source from the URL string."""
-    url_lower = url.lower()
-    if "youtube.com" in url_lower or "youtu.be" in url_lower:
-        return "YouTube"
-    if "instagram.com" in url_lower:
-        return "Instagram"
-    if "facebook.com" in url_lower or "fb.watch" in url_lower:
-        return "Facebook"
-    if "tiktok.com" in url_lower:
-        return "TikTok"
-    if "twitter.com" in url_lower or "x.com" in url_lower:
-        return "Twitter / X"
-    return "Unknown" # Default if no match
+# --- Helper function to log to Google Sheets ---
+def log_to_google_sheets(url, source, title_or_error, is_error=False):
+    """Logs a download attempt (success or failure) to the configured Google Sheet."""
+    if not sh:
+        print("Skipping Google Sheets log: connection not available.")
+        return
 
+    try:
+        all_values = sh.get_all_values()
+        next_sr_no = len(all_values)
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        row_to_add = [
+            next_sr_no,
+            date_str,
+            url,
+            source,
+            title_or_error
+        ]
+        
+        sh.append_row(row_to_add)
+        status = "ERROR" if is_error else "SUCCESS"
+        print(f"Logged {status} to Google Sheets for URL: {url}")
+    except Exception as e:
+        print(f"Failed to log to Google Sheets: {e}")
 
 # --- Backend Routes ---
 
@@ -334,98 +316,85 @@ def home():
     """Renders the homepage."""
     return render_template_string(HTML_TEMPLATE)
 
-# === THIS ENTIRE FUNCTION IS UPDATED ===
+# === FULLY REWRITTEN DOWNLOAD FUNCTION USING SUBPROCESS ===
 @app.route('/download', methods=['POST'])
 def download_video():
-    """Handles the download request from the form."""
+    """Handles the download request using a robust subprocess call to yt-dlp."""
     url = request.form['url']
-    
+
     try:
-        # === ydl_opts with ADVANCED SOLUTIONS DISABLED ===
-        ydl_opts = {
-            'format': 'best[ext=mp4]/best',
-            'outtmpl': os.path.join(DOWNLOAD_FOLDER, 'downloaded_video.%(ext)s'),
-            'quiet': True,
-            # 'proxy': 'http://YOUR_PROXY_URL_AND_PASSWORD', # <-- DISABLED: This line caused the error.
-            # 'cookiefile': 'cookies.txt',                   # <-- DISABLED: Only enable if you've uploaded a cookies.txt file.
-        }
+        # --- Step 1: Get video metadata (title, etc.) using yt-dlp without downloading ---
+        info_cmd = ["yt-dlp", "--print-json", "--skip-download", url]
+        
+        # Add cookies to the info command as well, as they might be needed to access metadata
+        if os.path.exists(COOKIE_FILE_PATH):
+            info_cmd.extend(["--cookies", COOKIE_FILE_PATH])
 
-        with YoutubeDL(ydl_opts) as ydl:
-            # === Get video info FIRST ===
-            info = ydl.extract_info(url, download=True)
-            video_title = info.get('title', 'video')
-            file_ext = info.get('ext', 'mp4')
-            
-            # This is the BEST source, from yt-dlp itself
-            source_extractor = info.get('extractor_key', 'Unknown') 
+        info_process = subprocess.run(info_cmd, capture_output=True, text=True, check=True)
+        info = json.loads(info_process.stdout)
+        
+        video_title = info.get('title', 'video')
+        file_ext = info.get('ext', 'mp4')
+        source_extractor = info.get('extractor_key', 'Unknown')
 
-            # === GOOGLE SHEETS LOGGING (SUCCESS) ===
-            if sh:
-                try:
-                    all_values = sh.get_all_values()
-                    next_sr_no = len(all_values) # Assumes header is Row 1
-                    date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # --- Step 2: Prepare the final filename and build the download command ---
+        safe_title = "".join(c for c in video_title if c.isalnum() or c in (' ', '_')).rstrip()
+        final_filename = f"{safe_title}.{file_ext}"
+        final_file_path = os.path.join(DOWNLOAD_FOLDER, final_filename)
 
-                    row_to_add = [
-                        next_sr_no,      # Column A: sr no
-                        date_str,        # Column B: date
-                        url,             # Column C: url
-                        source_extractor,# Column D: source (e.g., "youtube")
-                        video_title      # Column E: title
-                    ]
-                    
-                    sh.append_row(row_to_add)
-                    print(f"Successfully logged to Google Sheets: {video_title}")
-                except Exception as e:
-                    print(f"Failed to log to Google Sheets: {e}")
-            # === END OF LOGGING BLOCK ===
+        # Base download command
+        download_cmd = [
+            "yt-dlp",
+            "--format", "best[ext=mp4]/best",
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36",
+            "--retries", "10",
+            "--sleep-interval", "5",
+            "--sleep-requests", "3",
+            "-o", final_file_path,  # Specify the output file path directly
+            url
+        ]
 
-            # --- File handling logic ---
-            safe_title = "".join(c for c in video_title if c.isalnum() or c in (' ', '_')).rstrip()
-            downloaded_file_path = os.path.join(DOWNLOAD_FOLDER, f'downloaded_video.{file_ext}')
-            
-            final_filename = f"{safe_title}.{file_ext}"
-            final_file_path = os.path.join(DOWNLOAD_FOLDER, final_filename)
+        # Add cookies if the file exists
+        if os.path.exists(COOKIE_FILE_PATH):
+            download_cmd.extend(["--cookies", COOKIE_FILE_PATH])
+        
+        # Add proxy if defined in environment variables
+        proxy = os.environ.get("YTDLP_PROXY")
+        if proxy:
+            download_cmd.extend(["--proxy", proxy])
+            print(f"Using proxy: {proxy}")
 
-            if os.path.exists(final_file_path):
-                os.remove(final_file_path)
-            os.rename(downloaded_file_path, final_file_path)
+        # --- Step 3: Execute the download ---
+        print(f"Executing download command: {' '.join(shlex.quote(c) for c in download_cmd)}")
+        download_process = subprocess.run(download_cmd, capture_output=True, text=True)
 
-            print(f"Successfully downloaded: {final_filename}")
+        # --- Step 4: Handle the result ---
+        if download_process.returncode != 0:
+            # The download failed, raise an exception with the error message from yt-dlp
+            raise RuntimeError(download_process.stderr)
 
-            # 3. Send the file to the user
-            response = send_file(final_file_path, as_attachment=True)
-            return response
+        # --- Success Case ---
+        print(f"Successfully downloaded: {final_filename}")
+        log_to_google_sheets(url, source_extractor, video_title, is_error=False)
+        
+        # Send the file to the user
+        return send_file(final_file_path, as_attachment=True)
 
-    except Exception as e:
-        error_message = str(e).split('ERROR: ')[-1]
-        print(f"Error during download: {error_message}")
-
-        # === GOOGLE SHEETS LOGGING (FAILURE) ===
-        if sh:
-            try:
-                all_values = sh.get_all_values()
-                next_sr_no = len(all_values)
-                date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # --- NEW: Guess source from URL on error ---
-                guessed_source = guess_source_from_url(url)
-                
-                row_to_add = [
-                    next_sr_no,     # Column A: sr no
-                    date_str,       # Column B: date
-                    url,            # Column C: url
-                    guessed_source, # Column D: source (e.g., "YouTube")
-                    error_message   # Column E: title (is now the error message)
-                ]
-                
-                sh.append_row(row_to_add)
-                print(f"Logged download ERROR to Google Sheets.")
-            except Exception as e_log:
-                print(f"Failed to log error to Google Sheets: {e_log}")
-        # === End of error logging ===
-
-        return render_template_string(HTML_TEMPLATE, message=f"Error: Could not download the video. Please check the URL and try again.")
+    except (subprocess.CalledProcessError, RuntimeError, json.JSONDecodeError) as e:
+        # This block catches errors from both the metadata fetch and the download process
+        error_output = str(e)
+        if hasattr(e, 'stderr') and e.stderr: # If it's a subprocess error
+            error_output = e.stderr
+        
+        # Clean up the common "ERROR:" prefix from yt-dlp for cleaner logging
+        cleaned_error = error_output.split('ERROR: ')[-1].strip()
+        print(f"Download failed: {cleaned_error}")
+        
+        # Log the failure to Google Sheets
+        log_to_google_sheets(url, "Unknown", cleaned_error, is_error=True)
+        
+        # Show an error message to the user
+        return render_template_string(HTML_TEMPLATE, message="Error: Could not download the video. Please check the URL or try again later.")
 
 # --- Run the App ---
 if __name__ == '__main__':
@@ -433,6 +402,5 @@ if __name__ == '__main__':
     if not os.path.exists(DOWNLOAD_FOLDER):
         os.makedirs(DOWNLOAD_FOLDER)
     
-    # Runs the web server (for local testing)
-    # Gunicorn will run this on Render
+    # Run the web server (for local testing). Gunicorn will handle this on Render.
     app.run(debug=True, port=5000)
