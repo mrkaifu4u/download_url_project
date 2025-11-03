@@ -2,6 +2,7 @@ import os
 import gspread
 from flask import Flask, request, render_template_string, send_file
 from yt_dlp import YoutubeDL
+from datetime import datetime  # <-- FIXED HIDDEN CHARACTER HERE
 
 # --- Configuration ---
 
@@ -9,7 +10,7 @@ from yt_dlp import YoutubeDL
 app = Flask(__name__)
 
 # Path to your Google Sheets credentials
-# MAKE SURE you have 'credentials.json' from Step 1 in the same folder
+# This will be 'credentials.json' on Render
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 
 # The name of your Google Sheet
@@ -17,7 +18,7 @@ SERVICE_ACCOUNT_FILE = 'credentials.json'
 GOOGLE_SHEET_NAME = "MyDownloaderLog"
 
 # A folder to temporarily store downloads
-# Make sure this folder (e.g., 'temp_downloads') exists!
+# Render uses a temporary filesystem, so this is fine.
 DOWNLOAD_FOLDER = 'temp_downloads'
 
 # --- Google Sheets Setup ---
@@ -241,7 +242,6 @@ HTML_TEMPLATE = """
             <button type="submit">Download</button>
         </form>
 
-        <!-- Progress Bar Element -->
         <div class="progress-wrapper" id="progress-wrapper">
             <div class="progress-bar-container">
                 <div class="progress-bar" id="progress-bar"></div>
@@ -249,7 +249,6 @@ HTML_TEMPLATE = """
             <p class="progress-text" id="progress-text">Starting download...</p>
         </div>
         
-        <!-- Message from Flask -->
         {% if message %}
             <p class="message {{ 'success' if 'Successfully' in message else 'error' }}">{{ message }}</p>
         {% endif %}
@@ -311,6 +310,23 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# --- NEW HELPER FUNCTION ---
+def guess_source_from_url(url):
+    """Simple helper to guess the source from the URL string."""
+    url_lower = url.lower()
+    if "youtube.com" in url_lower or "youtu.be" in url_lower:
+        return "YouTube"
+    if "instagram.com" in url_lower:
+        return "Instagram"
+    if "facebook.com" in url_lower or "fb.watch" in url_lower:
+        return "Facebook"
+    if "tiktok.com" in url_lower:
+        return "TikTok"
+    if "twitter.com" in url_lower or "x.com" in url_lower:
+        return "Twitter / X"
+    return "Unknown" # Default if no match
+
+
 # --- Backend Routes ---
 
 @app.route('/')
@@ -318,25 +334,14 @@ def home():
     """Renders the homepage."""
     return render_template_string(HTML_TEMPLATE)
 
+# === THIS ENTIRE FUNCTION IS UPDATED ===
 @app.route('/download', methods=['POST'])
 def download_video():
     """Handles the download request from the form."""
     url = request.form['url']
     
-    # 1. Log to Google Sheets
-    if sh:
-        try:
-            sh.append_row([url, 'pending', 'N/A'])
-            print(f"Logged URL to Google Sheets: {url}")
-        except Exception as e:
-            print(f"Failed to log to Google Sheets: {e}")
-
-    # 2. Download the video using yt-dlp
     try:
-        # === FIX APPLIED HERE ===
-        # Changed the format to 'best[ext=mp4]/best'.
-        # This asks for the best quality pre-merged MP4 file,
-        # avoiding the need for ffmpeg to combine separate video and audio streams.
+        # === Your ydl_opts are perfect ===
         ydl_opts = {
             'format': 'best[ext=mp4]/best',
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, 'downloaded_video.%(ext)s'),
@@ -344,21 +349,44 @@ def download_video():
         }
 
         with YoutubeDL(ydl_opts) as ydl:
+            # === Get video info FIRST ===
             info = ydl.extract_info(url, download=True)
             video_title = info.get('title', 'video')
             file_ext = info.get('ext', 'mp4')
             
-            # Create a safe filename
+            # This is the BEST source, from yt-dlp itself
+            source_extractor = info.get('extractor_key', 'Unknown') 
+
+            # === GOOGLE SHEETS LOGGING (SUCCESS) ===
+            if sh:
+                try:
+                    all_values = sh.get_all_values()
+                    next_sr_no = len(all_values) # Assumes header is Row 1
+                    date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    row_to_add = [
+                        next_sr_no,      # Column A: sr no
+                        date_str,        # Column B: date
+                        url,             # Column C: url
+                        source_extractor,# Column D: source (e.g., "youtube")
+                        video_title      # Column E: title
+                    ]
+                    
+                    sh.append_row(row_to_add)
+                    print(f"Successfully logged to Google Sheets: {video_title}")
+                except Exception as e:
+                    print(f"Failed to log to Google Sheets: {e}")
+            # === END OF LOGGING BLOCK ===
+
+            # --- File handling logic ---
             safe_title = "".join(c for c in video_title if c.isalnum() or c in (' ', '_')).rstrip()
             downloaded_file_path = os.path.join(DOWNLOAD_FOLDER, f'downloaded_video.{file_ext}')
             
-            # Create a clean final filename
             final_filename = f"{safe_title}.{file_ext}"
             final_file_path = os.path.join(DOWNLOAD_FOLDER, final_filename)
 
-            # Rename the downloaded file
             if os.path.exists(final_file_path):
-                 os.remove(final_file_path)
+                os.remove(final_file_path)
             os.rename(downloaded_file_path, final_file_path)
 
             print(f"Successfully downloaded: {final_filename}")
@@ -370,6 +398,31 @@ def download_video():
     except Exception as e:
         error_message = str(e).split('ERROR: ')[-1]
         print(f"Error during download: {error_message}")
+
+        # === GOOGLE SHEETS LOGGING (FAILURE) ===
+        if sh:
+            try:
+                all_values = sh.get_all_values()
+                next_sr_no = len(all_values)
+                date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                # --- NEW: Guess source from URL on error ---
+                guessed_source = guess_source_from_url(url)
+                
+                row_to_add = [
+                    next_sr_no,     # Column A: sr no
+                    date_str,       # Column B: date
+                    url,            # Column C: url
+                    guessed_source, # Column D: source (e.g., "YouTube")
+                    error_message   # Column E: title (is now the error message)
+                ]
+                
+                sh.append_row(row_to_add)
+                print(f"Logged download ERROR to Google Sheets.")
+            except Exception as e_log:
+                print(f"Failed to log error to Google Sheets: {e_log}")
+        # === End of error logging ===
+
         return render_template_string(HTML_TEMPLATE, message=f"Error: Could not download the video. Please check the URL and try again.")
 
 # --- Run the App ---
@@ -378,5 +431,6 @@ if __name__ == '__main__':
     if not os.path.exists(DOWNLOAD_FOLDER):
         os.makedirs(DOWNLOAD_FOLDER)
     
-    # Runs the web server
+    # Runs the web server (for local testing)
+    # Gunicorn will run this on Render
     app.run(debug=True, port=5000)
