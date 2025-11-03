@@ -341,13 +341,13 @@ def download_video():
     url = request.form['url']
     
     try:
-        # === ydl_opts with ADVANCED SOLUTIONS ADDED ===
+        # === ydl_opts with ADVANCED SOLUTIONS DISABLED ===
         ydl_opts = {
             'format': 'best[ext=mp4]/best',
             'outtmpl': os.path.join(DOWNLOAD_FOLDER, 'downloaded_video.%(ext)s'),
             'quiet': True,
-            'proxy': 'http://YOUR_PROXY_URL_AND_PASSWORD', # <-- SOLUTION 1: Add your rotating proxy URL here
-            'cookiefile': 'cookies.txt',                   # <-- SOLUTION 2: Use the secret cookies.txt file
+            # 'proxy': 'http://YOUR_PROXY_URL_AND_PASSWORD', # <-- DISABLED: This line caused the error.
+            # 'cookiefile': 'cookies.txt',                   # <-- DISABLED: Only enable if you've uploaded a cookies.txt file.
         }
 
         with YoutubeDL(ydl_opts) as ydl:
@@ -436,4 +436,3 @@ if __name__ == '__main__':
     # Runs the web server (for local testing)
     # Gunicorn will run this on Render
     app.run(debug=True, port=5000)
-
