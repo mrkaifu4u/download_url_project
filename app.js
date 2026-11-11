@@ -428,21 +428,24 @@
   }
 
   async function fetchYouTube(url) {
-    // youtube-downloader24: check that API's own docs for its exact
-    // endpoint/params — the call below uses the common /extract-style
-    // shape and normalises whatever formats array comes back. If the
-    // subscribed YT API uses a different path, update API_HOSTS.youtube
-    // and this function to match its docs.
-    const res = await fetch('https://' + API_HOSTS.youtube + '/extract?url=' + encodeURIComponent(url), {
+    // youtube-downloader24 (verified 2026-11-11 on its RapidAPI page):
+    // GET /api/getVideoData?videoUrlId=<full YouTube URL> — the old
+    // /extract?url= path does not exist on this API. /api/getAllData
+    // returns video+audio+thumbnails; /api/getAudioData returns audio.
+    // Response shape is normalised defensively (formats/links/medias/
+    // videos) — confirm against a real subscribed call if it ever
+    // returns "No downloadable formats".
+    const res = await fetch('https://' + API_HOSTS.youtube + '/api/getVideoData?videoUrlId=' + encodeURIComponent(url), {
       headers: { 'x-rapidapi-host': API_HOSTS.youtube, 'x-rapidapi-key': settings.rapidapiKey }
     });
-    if (!res.ok) throw new Error('YouTube API returned HTTP ' + res.status + ' — check the endpoint/params in that API\'s RapidAPI docs and your subscription.');
+    if (!res.ok) throw new Error('YouTube API returned HTTP ' + res.status + ' — check your subscription on RapidAPI.');
     const data = await res.json();
-    const formats = (data.formats || data.links || data.medias || []).map(f => ({
-      quality: f.quality || f.label || 'Video',
-      label: (f.ext || f.format || 'mp4').toUpperCase() + (f.filesize ? ' · ' + fmtSize(f.filesize) : ''),
+    const list = data.formats || data.links || data.medias || data.videos || data.video || [];
+    const formats = (Array.isArray(list) ? list : [list]).map(f => ({
+      quality: f.quality || f.label || f.resolution || 'Video',
+      label: (f.ext || f.format || 'mp4').toUpperCase() + (f.filesize || f.size ? ' · ' + fmtSize(f.filesize || f.size) : ''),
       ext: ((f.ext || 'mp4').toLowerCase()),
-      url: f.url
+      url: f.url || f.link
     })).filter(f => f.url);
     if (!formats.length && data.url) formats.push({ quality: 'Original', label: 'MP4', ext: 'mp4', url: data.url });
     if (!formats.length) throw new Error('No downloadable formats returned for this YouTube link.');
@@ -450,7 +453,7 @@
       title: data.title || 'YouTube video',
       caption: data.description || '',
       author: data.author || data.channel || '',
-      thumbnail: data.thumbnail || '',
+      thumbnail: data.thumbnail || data.thumbnail_url || (Array.isArray(data.thumbnails) && data.thumbnails[0] && data.thumbnails[0].url) || '',
       duration: data.duration ? fmtDuration(data.duration) : '',
       formats
     };
