@@ -79,35 +79,21 @@
       </div>
     </div>
 
-    <!-- ===== Dashboard stat cards (dashboard page only) ===== -->
-    <section class="stat-row" id="statRow" aria-label="This month at a glance">
-      <div class="stat pink">
-        <div class="stat-ico">⬇</div>
-        <div><p>Total Downloads</p><strong id="statTotal">0</strong></div>
-      </div>
-      <div class="stat purple">
-        <div class="stat-ico">🔗</div>
-        <div><p>URLs Processed</p><strong id="statUrls">0</strong></div>
-      </div>
-      <div class="stat teal">
-        <div class="stat-ico">🎞</div>
-        <div><p>This Month</p><strong id="statMonth">0</strong></div>
-      </div>
-      <div class="stat amber">
-        <div class="stat-ico">↻</div>
-        <div><p>Available API</p><strong id="statApi">0</strong></div>
-      </div>
-    </section>
-
     <!-- ===== Fetch card ===== -->
     <section class="card fetch-card" id="fetchCard">
-      <h2><span class="dot">●</span> <span id="fetchTitle">Paste Video URL</span></h2>
-      <p class="hint" id="fetchHint">Paste a video link, preview it, pick a quality and download — straight to your PC or phone.</p>
+      <h2><span class="dot">●</span> <span id="fetchTitle">Download a Video</span></h2>
+      <p class="hint" id="fetchHint">Paste a video link, preview it, and download in your preferred quality.</p>
 
       <div class="url-row">
         <span class="url-ico">🔗</span>
         <input type="url" id="urlInput" placeholder="https://www.instagram.com/reel/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…" autocomplete="off" spellcheck="false">
-        <button class="btn" id="fetchBtn">▶ Fetch Video</button>
+        <button class="btn" id="fetchBtn">▶ Get Video</button>
+      </div>
+
+      <div class="quality-row" id="qualityRow" style="display:none;">
+        <label for="qualitySelect">Video quality</label>
+        <select id="qualitySelect" aria-label="Video quality"></select>
+        <span class="note">Mirrors the quality pills below the preview.</span>
       </div>
 
       <div class="quick-row">
@@ -129,10 +115,41 @@
       </div>
     </section>
 
+    <!-- ===== Quick Actions (dashboard page only) ===== -->
+    <section class="card qa-wrap" id="quickActions">
+      <h2><span class="dot">●</span> Quick Actions</h2>
+      <div class="qa-grid">
+        <button class="qa-card ig" data-qa-tool="ig_reel"><span class="qa-ico">◉</span><span>Download<br>Instagram Video</span></button>
+        <button class="qa-card yt" data-qa-tool="yt_short"><span class="qa-ico">▶</span><span>Download<br>YouTube Video</span></button>
+        <button class="qa-card fb" data-qa-tool="fb_video"><span class="qa-ico">f</span><span>Download<br>Facebook Video</span></button>
+        <button class="qa-card cv" data-qa-tool="to_song"><span class="qa-ico">♪</span><span>Convert<br>Video to Audio</span></button>
+      </div>
+    </section>
+
+    <!-- ===== Dashboard stat cards (dashboard page only) ===== -->
+    <section class="stat-row" id="statRow" aria-label="This month at a glance">
+      <div class="stat pink">
+        <div class="stat-ico">⬇</div>
+        <div><p>Total Downloads</p><strong id="statTotal">0</strong></div>
+      </div>
+      <div class="stat purple">
+        <div class="stat-ico">🔗</div>
+        <div><p>URLs Processed</p><strong id="statUrls">0</strong></div>
+      </div>
+      <div class="stat teal">
+        <div class="stat-ico">🎞</div>
+        <div><p>This Month</p><strong id="statMonth">0</strong></div>
+      </div>
+      <div class="stat amber">
+        <div class="stat-ico">↻</div>
+        <div><p>Available API</p><strong id="statApi">0</strong></div>
+      </div>
+    </section>
+
     <!-- ===== Video-to-Audio converter options (converter page only) ===== -->
     <section class="card converter-card" id="converterCard" style="display:none;">
       <h2><span class="dot">●</span> Video to Audio Converter</h2>
-      <p class="hint">Paste a video URL above (or pick a local file to see its name) and press Convert — the audio stream returned by the API is downloaded as MP3 / M4A.</p>
+      <p class="hint">Paste a video URL above (or pick a local file to see its name) and press Convert — the audio stream returned by the API is downloaded as MP3 / M4A. WAV is not returned by the API: if you pick WAV, the MP3 stream is saved instead and the app says so.</p>
       <div class="converter-grid">
         <div class="field">
           <label for="audioFileInput">Upload a video file (optional)</label>
@@ -145,6 +162,7 @@
           <select id="audioFormat">
             <option value="mp3" selected>MP3</option>
             <option value="m4a">M4A</option>
+            <option value="wav">WAV</option>
           </select>
         </div>
         <div class="field">
@@ -157,7 +175,11 @@
         </div>
       </div>
       <button class="btn" id="convertBtn">♪ Convert to Audio</button>
-      <p class="hint" style="margin-top:12px;">Honest note: a browser cannot transcode video locally, so a local file upload is <b>not</b> converted on your device — use the video URL above to extract audio via the API. The quality you pick is requested from the API where it is supported; the API returns the audio stream it has.</p>
+      <div class="progress" id="convertProgress">
+        <div class="bar"><i id="convertBar"></i></div>
+        <p id="convertText">Converting…</p>
+      </div>
+      <p class="hint" style="margin-top:12px;">Honest note: a browser cannot transcode video locally, so a local file upload is <b>not</b> converted on your device — use the video URL above to extract audio via the API. The quality you pick is requested from the API where it is supported; the API returns the audio stream it has. WAV is never transcoded here: if you pick WAV and the API returns no WAV stream, the MP3 stream is saved instead and the app says so.</p>
     </section>
 
     <!-- ===== Preview ===== -->

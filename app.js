@@ -35,12 +35,15 @@
     audioFileInput: $('audioFileInput'), audioFileName: $('audioFileName'),
     audioFormat: $('audioFormat'), audioQuality: $('audioQuality'), convertBtn: $('convertBtn'),
     viewAllBtn: $('viewAllBtn'), drawerClose: $('drawerClose'),
-    appsScriptInput: $('appsScriptInput'), settingsMsg: $('settingsMsg')
+    appsScriptInput: $('appsScriptInput'), settingsMsg: $('settingsMsg'),
+    quickActions: $('quickActions'), qualitySelect: $('qualitySelect'), qualityRow: $('qualityRow'),
+    convertProgress: $('convertProgress'), convertBar: $('convertBar'), convertText: $('convertText')
   };
 
   let currentTool = 'dashboard';
   let currentResult = null;   // normalised fetch result
   let selectedQuality = null; // chosen format object
+  let lastSortedFormats = []; // formats of the current preview, in pill order
   let showAllHistory = false;
   let trendDays = 7;
   let audioFormatChoice = 'mp3';
@@ -337,6 +340,20 @@
   }
   function clearStatus() { el.status.className = 'status'; el.status.innerHTML = ''; }
 
+  /* ---------- converter progress (mirrors the real download progress) ---------- */
+  function showConvertProgress(pct, text) {
+    if (!el.convertProgress) return;
+    el.convertProgress.classList.add('show');
+    if (el.convertBar) el.convertBar.style.width = pct + '%';
+    if (el.convertText) el.convertText.textContent = text;
+  }
+  function hideConvertProgress() { if (el.convertProgress) el.convertProgress.classList.remove('show'); }
+  function mirrorDownloadProgress() {
+    if (!el.convertProgress || !el.convertProgress.classList.contains('show')) return;
+    if (el.convertBar) el.convertBar.style.width = el.progressBar.style.width;
+    if (el.convertText) el.convertText.textContent = el.progressText.textContent;
+  }
+
   /* ---------- API calls ---------- */
   function needKey() {
     if (!settings.rapidapiKey) {
@@ -468,6 +485,7 @@
     el.fetchBtn.disabled = true;
     el.fetchBtn.textContent = 'Fetching…';
     setStatus('<span class="spinner"></span>Checking the video… (uses 1 API call)', 'info');
+    if (tool === 'to_song') showConvertProgress(20, 'Converting… fetching the audio stream from the API');
     el.previewCard.classList.remove('show');
 
     try {
@@ -486,19 +504,26 @@
         if (audio.length) result.formats = audio;
         const wanted = audio.filter(f => (f.ext || '').toLowerCase() === audioFormatChoice);
         if (wanted.length) result.formats = wanted; // prefer the format picked in the converter
+        // WAV is never returned by the API and cannot be transcoded in the
+        // browser: picking WAV falls back to the MP3/M4A stream, and the
+        // preview note says so plainly instead of pretending a WAV exists.
+        result.wavFallback = audioFormatChoice === 'wav' &&
+          !result.formats.some(f => (f.ext || '').toLowerCase() === 'wav');
         result.isAudio = true;
       }
 
       bumpQuota(bucket); // count AFTER a successful fetch
       currentResult = Object.assign(result, { sourceUrl: url, platform: detected.platform, tool, bucket });
       renderPreview(result);
+      if (tool === 'to_song') showConvertProgress(100, 'Audio ready — pick a format above, then press Download.');
       setStatus('Video found ✓ — pick a quality, then Download. (1 ' + bucket + ' call used, ' + quotaLeft(bucket) + ' left this month.)', 'ok');
       await logFetch(url, detected.platform, tool, bucket);
     } catch (e) {
+      if (tool === 'to_song') showConvertProgress(0, 'Conversion failed — try again with a different link.');
       setStatus('Could not fetch this video: ' + escapeHtml(e.message || e), 'err');
     } finally {
       el.fetchBtn.disabled = false;
-      el.fetchBtn.textContent = 'Fetch video';
+      el.fetchBtn.textContent = '▶ Get Video';
     }
   }
 
@@ -544,7 +569,8 @@
       el.previewImage.src = r.thumbnail;
     }
     el.downloadNote.textContent = r.isAudio
-      ? 'Audio download: this saves the audio stream the API returns (.mp3 / .m4a). The browser cannot transcode video locally — if the API returns video-only, pick the audio format above.'
+      ? (r.wavFallback ? 'WAV is not returned by the API — saved as MP3 instead. ' : '') +
+        'Audio download: this saves the audio stream the API returns (.mp3 / .m4a). The browser cannot transcode video locally — if the API returns video-only, pick the audio format above.'
       : 'Download saves the file straight to your Downloads folder (PC) or Files/Downloads (phone).';
 
     // Quality pills — IG usually returns a single 720p HD URL; YT/FB return several.
@@ -559,17 +585,35 @@
       const b = document.createElement('button');
       b.className = 'qpill' + (i === 0 ? ' active' : '');
       b.innerHTML = escapeHtml(f.quality) + '<small>' + escapeHtml(f.label || f.ext) + '</small>';
-      b.onclick = () => {
-        selectedQuality = f;
-        el.qualityList.querySelectorAll('.qpill').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        if (!r.isAudio) { el.previewVideo.src = f.url; el.previewVideo.load(); }
-      };
+      b.onclick = () => selectQuality(f);
       el.qualityList.appendChild(b);
       if (i === 0) selectedQuality = f;
     });
     if (!r.formats.length) el.qualityList.innerHTML = '<p class="empty">No quality options returned.</p>';
+    syncQualitySelect(sorted); // YouTube / Facebook quality <select> mirrors the pills
     el.previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  /* ---------- quality selection (pills + <select> stay in sync) ---------- */
+  function selectQuality(f) {
+    if (!f) return;
+    selectedQuality = f;
+    const idx = lastSortedFormats.indexOf(f);
+    el.qualityList.querySelectorAll('.qpill').forEach((x, i) => x.classList.toggle('active', i === idx));
+    if (el.qualitySelect) el.qualitySelect.value = String(idx >= 0 ? idx : 0);
+    if (!currentResult || !currentResult.isAudio) { el.previewVideo.src = f.url; el.previewVideo.load(); }
+  }
+  function syncQualitySelect(sorted) {
+    lastSortedFormats = sorted || [];
+    if (!el.qualitySelect || !el.qualityRow) return;
+    const page = PAGE_FOR_TOOL[currentTool] || '';
+    const show = (page === 'youtube' || page === 'facebook') && lastSortedFormats.length > 0;
+    el.qualityRow.style.display = show ? '' : 'none';
+    if (!show) return;
+    el.qualitySelect.innerHTML = lastSortedFormats.map((f, i) =>
+      '<option value="' + i + '">' + escapeHtml(f.quality) + ' — ' + escapeHtml(f.label || f.ext || '') + '</option>').join('');
+    const idx = lastSortedFormats.indexOf(selectedQuality);
+    el.qualitySelect.value = String(idx >= 0 ? idx : 0);
   }
 
   /* ---------- download (anchor + blob fallback) ---------- */
@@ -583,6 +627,7 @@
     el.progress.classList.add('show');
     el.progressBar.style.width = '15%';
     el.progressText.textContent = 'Starting download…';
+    mirrorDownloadProgress();
     try {
       // Try a blob download first so the file lands in Downloads even when
       // the CDN blocks a plain anchor download (cross-origin).
@@ -595,7 +640,7 @@
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value); received += value.length;
-        if (total) { el.progressBar.style.width = Math.round(received / total * 100) + '%'; el.progressText.textContent = 'Downloading… ' + fmtSize(received) + (total ? ' / ' + fmtSize(total) : ''); }
+        if (total) { el.progressBar.style.width = Math.round(received / total * 100) + '%'; el.progressText.textContent = 'Downloading… ' + fmtSize(received) + (total ? ' / ' + fmtSize(total) : ''); mirrorDownloadProgress(); }
       }
       const blob = new Blob(chunks, { type: f.ext === 'mp3' ? 'audio/mpeg' : 'video/mp4' });
       const a = document.createElement('a');
@@ -603,6 +648,7 @@
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
       el.progressBar.style.width = '100%';
       el.progressText.textContent = 'Saved: ' + filename;
+      mirrorDownloadProgress();
       setStatus('Download started ✓ — check your Downloads folder.', 'ok');
     } catch (e) {
       // Fallback: direct anchor (works when the CDN allows it; the file
@@ -629,7 +675,7 @@
 
   /* ---------- tool switching ---------- */
   const TOOL_TEXT = {
-    dashboard: ['Dash<span>board</span>', 'Paste a video link, preview it, pick a quality and download — straight to your PC or phone.'],
+    dashboard: ['Dash<span>board</span>', 'Paste a video link, preview it, and download in your preferred quality.'],
     ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link — preview it, then download in HD.'],
     ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — fetch while it is still live. Uses the all-in-one API.'],
     ig_dp: ['Instagram <span>DP</span>', 'Enter a username below, or paste a profile link — downloads the full-size profile picture. Uses the all-in-one API.'],
@@ -638,7 +684,7 @@
     fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link — preview it, then download. Uses the all-in-one API.'],
     yt_short: ['YouTube <span>Short</span>', 'Paste a YouTube Shorts link (youtube.com/shorts/… or youtu.be/…) and download it.'],
     yt_full: ['YouTube <span>Video</span>', 'Paste a full YouTube video link (youtube.com/watch?v=…) and pick a quality.'],
-    to_song: ['Video to <span>Song</span>', 'Paste any video link — the audio-only format is downloaded as .mp3 / .m4a. The browser cannot transcode video locally.']
+    to_song: ['Video to <span>Song</span>', 'Paste any video link — the audio-only format is downloaded as .mp3 / .m4a (WAV is not returned by the API — picking WAV saves the MP3 stream instead). The browser cannot transcode video locally.']
   };
   const PAGE_FOR_TOOL = { dashboard: 'dashboard', ig_reel: 'instagram', ig_story: 'instagram', ig_dp: 'instagram', ig_caption: 'instagram', ig_bio: 'instagram', fb_video: 'facebook', yt_short: 'youtube', yt_full: 'youtube', to_song: 'converter' };
   function setTool(tool) {
@@ -653,11 +699,15 @@
     }
     if (el.statRow) el.statRow.style.display = page === 'dashboard' ? '' : 'none';
     if (el.trendCard) el.trendCard.style.display = page === 'dashboard' ? '' : 'none';
+    if (el.quickActions) el.quickActions.style.display = page === 'dashboard' ? '' : 'none';
+    if (el.qualityRow) el.qualityRow.style.display = 'none'; // renderPreview shows it again for YT/FB
+    if (page !== 'converter') hideConvertProgress();
     if (el.converterCard) el.converterCard.style.display = page === 'converter' ? '' : 'none';
     if (page === 'dashboard') renderStats();
     const t = TOOL_TEXT[tool] || TOOL_TEXT.dashboard;
     el.pageTitle.innerHTML = t[0]; el.pageSub.textContent = t[1];
-    el.fetchTitle.textContent = tool === 'ig_dp' ? 'Instagram username / profile URL'
+    el.fetchTitle.textContent = tool === 'dashboard' ? 'Download a Video'
+      : tool === 'ig_dp' ? 'Instagram username / profile URL'
       : tool === 'ig_bio' ? 'Instagram username / profile URL'
       : tool === 'to_song' ? 'Paste video URL to extract the song'
       : 'Paste video URL';
@@ -704,6 +754,11 @@
   /* ---------- wire up ---------- */
   document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
   document.querySelectorAll('.tab[data-tab-tool]').forEach(t => t.addEventListener('click', () => setTool(t.dataset.tabTool)));
+  document.querySelectorAll('[data-qa-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.qaTool)));
+  if (el.qualitySelect) el.qualitySelect.addEventListener('change', () => {
+    const f = lastSortedFormats[Number(el.qualitySelect.value)];
+    if (f) selectQuality(f);
+  });
   if (el.drawerClose) el.drawerClose.addEventListener('click', () => { el.sidebar.classList.remove('open'); el.backdrop.classList.remove('show'); });
   if (el.viewAllBtn) el.viewAllBtn.addEventListener('click', () => { showAllHistory = !showAllHistory; renderHistory(); });
   if (el.trendRange) el.trendRange.addEventListener('change', () => { trendDays = Number(el.trendRange.value) || 7; drawTrend(); });
