@@ -1,9 +1,12 @@
 /* ==========================================================================
    Video Downloader — config.js
    --------------------------------------------------------------------------
-   NO API KEYS IN THIS FILE. Keys are entered by the user in the app's
-   Settings panel and stored ONLY in the browser's localStorage
-   (key: vd_settings). Never commit a real RapidAPI key to git.
+   WARNING: this file contains a built-in RapidAPI key, added at the
+   owner's explicit request (2026-11-11) so visitors can use the app
+   without pasting a key. This repo is PUBLIC — anyone can view source
+   and copy this key, and every visitor's Fetch counts against the
+   owner's RapidAPI quota. If the quota is abused, rotate the key on
+   RapidAPI and update it here. A key typed in Settings overrides it.
    ========================================================================== */
 
 /**
@@ -40,6 +43,8 @@
  *   Fallback noted in README: "YouTube FAST Downloader" free plan
  *   100 requests / month, 50 MB max file size.
  */
+const DEFAULT_RAPIDAPI_KEY = 'c109599a7fmshd1709ec3e60efc1p11e3bdjsn79d71c03eb68';
+
 const API_HOSTS = {
   instagram: 'instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com',
   allinone: 'social-media-downloader-api-pro.p.rapidapi.com',
@@ -82,4 +87,4 @@ const TOOLS = {
 };
 
 // Expose for app.js (plain <script> files, no modules, so it works from file:// too).
-window.VD_CONFIG = { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS };
+window.VD_CONFIG = { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY };

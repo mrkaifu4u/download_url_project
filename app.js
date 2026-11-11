@@ -2,13 +2,15 @@
    Video Downloader — app.js
    Flow: paste URL -> Fetch (1 API call) -> preview on screen ->
          pick quality -> Download straight to PC / phone.
-   Keys live ONLY in localStorage (vd_settings). Nothing here phones home
+   A built-in RapidAPI key (config.js, owner's choice, public repo) is
+   used when no key is saved in Settings; a saved key overrides it.
+   Keys typed in Settings live ONLY in localStorage (vd_settings).
    except: the RapidAPI host you fetch from, and your own Apps Script URL.
    ========================================================================== */
 (function () {
   'use strict';
   const CFG = window.VD_CONFIG;
-  const { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS } = CFG;
+  const { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY } = CFG;
 
   /* ---------- tiny helpers ---------- */
   const $ = (id) => document.getElementById(id);
@@ -38,11 +40,11 @@
     try {
       const s = JSON.parse(localStorage.getItem(STORE.settings) || '{}');
       return {
-        rapidapiKey: s.rapidapiKey || '',
+        rapidapiKey: s.rapidapiKey || DEFAULT_RAPIDAPI_KEY || '',
         appsScriptUrl: s.appsScriptUrl || '',
         limits: Object.assign({}, DEFAULT_LIMITS, s.limits || {})
       };
-    } catch { return { rapidapiKey: '', appsScriptUrl: '', limits: Object.assign({}, DEFAULT_LIMITS) }; }
+    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', appsScriptUrl: '', limits: Object.assign({}, DEFAULT_LIMITS) }; }
   }
   function saveSettings(s) { localStorage.setItem(STORE.settings, JSON.stringify(s)); }
   let settings = loadSettings();
