@@ -40,7 +40,8 @@
     viewAllBtn: $('viewAllBtn'), drawerClose: $('drawerClose'),
     appsScriptInput: $('appsScriptInput'), settingsMsg: $('settingsMsg'),
     quickActions: $('quickActions'), qualitySelect: $('qualitySelect'), qualityRow: $('qualityRow'),
-    convertProgress: $('convertProgress'), convertBar: $('convertBar'), convertText: $('convertText')
+    convertProgress: $('convertProgress'), convertBar: $('convertBar'), convertText: $('convertText'),
+    fetchCard: $('fetchCard')
   };
 
   let currentTool = 'dashboard';
@@ -123,7 +124,8 @@
       { bucket: 'instagram', label: 'Instagram', host: API_HOSTS.instagram },
       { bucket: 'youtube',   label: 'YouTube',   host: API_HOSTS.youtube },
       { bucket: 'facebook',  label: 'Facebook',  host: 'via All-in-one API' },
-      { bucket: 'allinone',  label: 'All-in-one', host: API_HOSTS.allinone }
+      { bucket: 'allinone',  label: 'All-in-one', host: API_HOSTS.allinone },
+      { bucket: 'ig_profile', label: 'IG Profile (DP/Bio)', host: API_HOSTS.ig_profile }
     ];
     el.monthLabel.textContent = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     el.quotaGrid.innerHTML = rows.map(r => {
@@ -253,7 +255,7 @@
   }
   function renderHistory() {
     const h = loadHistory();
-    if (!h.length) { el.historyList.innerHTML = '<p class="empty">No downloads yet — paste a link above and press Fetch.</p>'; if (el.viewAllBtn) el.viewAllBtn.style.display = 'none'; return; }
+    if (!h.length) { el.historyList.innerHTML = '<p class="empty">No downloads yet — pick a tool from Quick Actions and fetch a video.</p>'; if (el.viewAllBtn) el.viewAllBtn.style.display = 'none'; return; }
     if (el.viewAllBtn) { el.viewAllBtn.style.display = ''; el.viewAllBtn.textContent = showAllHistory ? 'Show less ↑' : 'View All →'; }
     const shown = showAllHistory ? h.slice(0, 100) : h.slice(0, 6);
     const platIcon = { instagram: '◉', youtube: '▶', facebook: 'f', allinone: '♪' };
@@ -289,6 +291,7 @@
   }
   function bucketFor(platform, tool) {
     if (tool === 'to_song') return 'allinone';
+    if (tool === 'ig_dp' || tool === 'ig_bio') return 'ig_profile'; // DP/Bio use the profile API
     if (platform === 'facebook') return 'allinone'; // FB goes through the all-in-one API
     return platform || 'allinone';
   }
@@ -459,6 +462,74 @@
     };
   }
 
+  /* ---------- profile input: URL, username or account ID ---------- */
+  const PROFILE_RESERVED = new Set(['reel', 'reels', 'p', 'tv', 'stories', 'story', 'explore', 'accounts', 'direct', 'about', 'legal', 'developer', 'settings', 'igtv', 'home', 'search']);
+  function profileInputOf(raw) {
+    // Accepts a full profile link, a bare username, "@username", or a
+    // numeric account ID. Returns { username } or { id }, or null when
+    // the input is not a profile at all (a reel link, google.com, …).
+    let s = (raw || '').trim();
+    if (!s) return null;
+    if (/^\d+$/.test(s)) return { id: s };
+    const m = s.match(/^(?:https?:\/\/)?(?:www\.)?instagram\.com\/([A-Za-z0-9._]+)\/?(?:[?#].*)?$/i);
+    if (m) {
+      const name = m[1];
+      if (!PROFILE_RESERVED.has(name.toLowerCase())) return { username: name };
+      return null;
+    }
+    s = s.replace(/^@/, '');
+    if (/^[A-Za-z0-9._]{1,30}$/.test(s) && !PROFILE_RESERVED.has(s.toLowerCase()) && !/\.(com|net|org|io|in)$/i.test(s)) return { username: s };
+    return null;
+  }
+
+  /* ---------- per-section URL validation ----------
+     Each tool only accepts links that belong to it. A Facebook link in
+     the Reel section (or google.com anywhere) is rejected HERE with a
+     plain message — it is never silently sent to another API. */
+  function validateUrlForTool(url, tool) {
+    const u = (url || '').trim().toLowerCase();
+    const isIG = /instagram\.com/.test(u), isFB = /facebook\.com|fb\.watch/.test(u), isYT = /youtube\.com|youtu\.be/.test(u);
+    const reelOk = isIG && /\/(reel|reels|p|tv)\/[^/]+/.test(u);
+    const storyOk = isIG && /\/stories?\/[^/]+/.test(u);
+    const ytShortOk = /youtube\.com\/shorts\/[^/]+/.test(u) || /youtu\.be\/[^/]+/.test(u);
+    const ytFullOk = /youtube\.com\/watch/.test(u) || /youtube\.com\/embed\/[^/]+/.test(u) || /music\.youtube\.com\/watch/.test(u) || /youtu\.be\/[^/]+/.test(u);
+    const fbOk = isFB && (/\/videos?\/[^/]+/.test(u) || /\/reel\/[^/]+/.test(u) || /fb\.watch\/[^/]+/.test(u) || /facebook\.com\/watch/.test(u));
+    switch (tool) {
+      case 'ig_reel': return reelOk ? null : 'This URL is invalid for Reel Download. Please paste a correct Instagram Reel link (instagram.com/reel/…).';
+      case 'ig_caption': return reelOk ? null : 'This URL is invalid for Copy Reel Caption. Please paste a correct Instagram Reel link (instagram.com/reel/…).';
+      case 'ig_story': return storyOk ? null : 'This URL is invalid for Story Download. Please paste a correct Instagram Story link (instagram.com/stories/…).';
+      case 'ig_dp': return profileInputOf(url) ? null : 'This URL is invalid for DP Download. Please paste a correct Instagram profile link or username (instagram.com/<username>/ or just the username).';
+      case 'ig_bio': return profileInputOf(url) ? null : 'This URL is invalid for Copy Bio. Please paste a correct Instagram profile link or username (instagram.com/<username>/ or just the username).';
+      case 'yt_short': return ytShortOk ? null : 'This URL is invalid for Short Download. Please paste a correct YouTube Shorts link (youtube.com/shorts/…).';
+      case 'yt_full': return ytFullOk ? null : 'This URL is invalid for Full Video Download. Please paste a correct YouTube video link (youtube.com/watch?v=…).';
+      case 'fb_video': return fbOk ? null : 'This URL is invalid for Facebook Video Download. Please paste a correct Facebook video link.';
+      case 'to_song': return (isIG && (reelOk || storyOk)) || isYT || isFB ? null : 'This URL is invalid for Video to Audio. Please paste a correct Instagram, YouTube or Facebook video link.';
+      default: return null; // dashboard: auto-detect handles it
+    }
+  }
+
+  /* ---------- Instagram profile (DP + Bio): the REAL profile ----------
+     Instagram Scraper API — GET /api/v1/instagram/profile-info.
+     One call returns the bio AND the full-size profile picture, so DP
+     and Bio share it. (The working Instagram /fetch API answers HTTP
+     400 for profile URLs, so it cannot do DP/Bio.) */
+  async function fetchProfile(ref) {
+    const q = ref.id ? 'user_id=' + ref.id : 'username=' + encodeURIComponent(ref.username);
+    const res = await fetch('https://' + API_HOSTS.ig_profile + '/api/v1/instagram/profile-info?' + q, {
+      headers: { 'x-rapidapi-host': API_HOSTS.ig_profile, 'x-rapidapi-key': settings.rapidapiKey }
+    });
+    if (!res.ok) throw new Error('Instagram Profile API returned HTTP ' + res.status + ' — subscribe to its free plan on RapidAPI (Instagram Scraper API, $0/month, 50 requests/month).');
+    const data = await res.json();
+    const d = data.data || data;
+    if (!d || (!d.username && !d.profile_pic_url && !d.id)) throw new Error('No profile found for that username.');
+    return {
+      username: d.username || ref.username || '', fullName: d.full_name || '',
+      bio: d.biography || '', dp: d.profile_pic_url_hd || d.profile_pic_url || '',
+      dpThumb: d.profile_pic_url || '', followers: d.follower_count,
+      following: d.following_count, isPrivate: d.is_private, isVerified: d.is_verified
+    };
+  }
+
   function fmtSize(b) {
     b = Number(b); if (!b) return '';
     return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB';
@@ -471,22 +542,39 @@
 
   /* ---------- fetch flow ---------- */
   async function handleFetch() {
-    const url = el.urlInput.value.trim();
-    if (!url) { setStatus('Paste a video URL first.', 'err'); return; }
-    let detected = detectPlatform(url);
-    if (!detected.platform) {
-      setStatus('That link was not recognised. Paste an Instagram, Facebook or YouTube video link.', 'err');
+    const tool = currentTool;
+    // DP / Bio read the profile from either box (main URL or helper field):
+    // a full profile link, a bare username, @username, or a numeric ID.
+    const rawInput = (tool === 'ig_dp' || tool === 'ig_bio')
+      ? (el.urlInput.value.trim() || el.usernameInput.value.trim())
+      : el.urlInput.value.trim();
+    if (!rawInput) {
+      setStatus(tool === 'ig_dp' || tool === 'ig_bio' ? 'Enter an Instagram username or profile link first.' : 'Paste a video URL first.', 'err');
       return;
     }
-    // Tool-specific routing: DP / Bio / Story go through the all-in-one API —
-    // but only when the link is actually a profile/story link. A reel link
-    // must use the Instagram API even if an earlier partial auto-detect
-    // left the wrong tool selected (typing "instagram.com/reel/…" used to
-    // lock the tool to DP Download and send the reel to the wrong API).
-    const tool = currentTool;
-    if ((tool === 'ig_dp' || tool === 'ig_bio' || tool === 'ig_story') && detected.kind !== 'reel') detected = { platform: 'instagram', kind: tool === 'ig_story' ? 'story' : 'profile' };
-    if (tool === 'fb_video') detected = { platform: 'facebook', kind: 'video' };
-    if (tool === 'yt_short' || tool === 'yt_full') detected = { platform: 'youtube', kind: tool === 'yt_short' ? 'short' : 'video' };
+    let detected, profileRef = null;
+    let url = rawInput;
+    if (tool === 'ig_dp' || tool === 'ig_bio') {
+      profileRef = profileInputOf(rawInput);
+      if (!profileRef) {
+        setStatus('This URL is invalid for ' + (tool === 'ig_dp' ? 'DP Download' : 'Copy Bio') + '. Please paste a correct Instagram profile link or username (instagram.com/<username>/ or just the username).', 'err');
+        return;
+      }
+      detected = { platform: 'instagram', kind: 'profile' };
+      if (profileRef.username) url = 'https://www.instagram.com/' + profileRef.username + '/';
+    } else {
+      // Strict per-section check first: a link that belongs to another
+      // section (or google.com) is rejected here, never sent to the
+      // wrong API. The old code forced the platform from the tool and
+      // silently fetched mismatched links — that is gone.
+      const bad = validateUrlForTool(rawInput, tool);
+      if (bad) { setStatus(bad, 'err'); return; }
+      detected = detectPlatform(rawInput);
+      if (!detected.platform) {
+        setStatus('That link was not recognised. Paste an Instagram, Facebook or YouTube video link.', 'err');
+        return;
+      }
+    }
 
     const bucket = bucketFor(detected.platform, tool);
     if (isHostDisabled(bucket) || (detected.platform === 'facebook' && isHostDisabled('facebook'))) {
@@ -507,12 +595,24 @@
 
     try {
       let result;
-      if (detected.platform === 'instagram' && (tool === 'ig_reel' || tool === 'ig_caption' || tool === 'dashboard')) {
+      if (profileRef) {
+        // DP / Bio: one profile-info call gives the REAL bio and the
+        // full-size profile picture — no invented data, ever.
+        const p = await fetchProfile(profileRef);
+        const who = (p.fullName ? p.fullName + ' ' : '') + '(@' + (p.username || profileRef.username || profileRef.id || '') + ')';
+        if (tool === 'ig_dp') {
+          if (!p.dp) throw new Error('No profile picture found for this profile.');
+          result = { title: who, caption: p.bio || '', author: p.username || '', thumbnail: p.dpThumb || p.dp, duration: '', formats: [{ quality: 'Profile picture', label: 'JPG', ext: 'jpg', url: p.dp }] };
+        } else {
+          if (!p.bio) throw new Error('This profile has no bio text.');
+          result = { title: who, caption: p.bio, author: p.username || '', thumbnail: p.dpThumb || p.dp, duration: '', formats: [] };
+        }
+      } else if (detected.platform === 'instagram' && (tool === 'ig_reel' || tool === 'ig_caption' || tool === 'dashboard')) {
         result = await fetchInstagram(url);
       } else if (detected.platform === 'youtube' && tool !== 'to_song') {
         result = await fetchYouTube(url).catch(() => fetchAllInOne(url)); // YT fallback: all-in-one
       } else {
-        result = await fetchAllInOne(url); // Facebook, Story, DP, Bio, Video-to-Song
+        result = await fetchAllInOne(url); // Facebook, Story, Video-to-Song
       }
 
       // Video-to-Song: keep audio-only formats when the API provides them.
@@ -574,6 +674,8 @@
     else el.previewDuration.style.display = 'none';
 
     const first = r.formats[0];
+    // No downloadable format (e.g. Copy Bio) means nothing to download.
+    if (el.downloadBtn) el.downloadBtn.disabled = !r.formats.length;
     const mediaBox = el.previewVideo.parentElement; // .preview-media
     if (mediaBox) mediaBox.style.display = ''; // restore after an earlier failed preview hid it
     // If the still thumbnail cannot be shown either, hide the (otherwise
@@ -584,7 +686,15 @@
       if (mediaBox) mediaBox.style.display = 'none';
       el.downloadNote.textContent += ' Preview could not be shown in this browser — the Download button below still works.';
     };
-    if (first) {
+    const isImage = first && /^(jpg|jpeg|png|webp|gif)$/i.test(first.ext || '');
+    if (isImage) {
+      // DP Download: the "video" is a picture — show the image itself,
+      // not a video player trying to play a JPG.
+      el.previewVideo.style.display = 'none';
+      el.previewImage.style.display = 'block';
+      el.previewImage.src = first.url;
+      el.previewImage.onerror = showThumbFallback;
+    } else if (first) {
       el.previewVideo.style.display = 'block';
       el.previewImage.style.display = 'none';
       el.previewVideo.poster = r.thumbnail || '';
@@ -682,7 +792,8 @@
         chunks.push(value); received += value.length;
         if (total) { el.progressBar.style.width = Math.round(received / total * 100) + '%'; el.progressText.textContent = 'Downloading… ' + fmtSize(received) + (total ? ' / ' + fmtSize(total) : ''); mirrorDownloadProgress(); }
       }
-      const blob = new Blob(chunks, { type: f.ext === 'mp3' ? 'audio/mpeg' : 'video/mp4' });
+      const mime = f.ext === 'mp3' ? 'audio/mpeg' : /^(jpg|jpeg)$/i.test(f.ext) ? 'image/jpeg' : f.ext === 'png' ? 'image/png' : 'video/mp4';
+      const blob = new Blob(chunks, { type: mime });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = filename; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
@@ -715,12 +826,12 @@
 
   /* ---------- tool switching ---------- */
   const TOOL_TEXT = {
-    dashboard: ['Dash<span>board</span>', 'Paste a video link, preview it, and download in your preferred quality.'],
+    dashboard: ['Dash<span>board</span>', 'Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
     ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link — preview it, then download in HD.'],
     ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — fetch while it is still live. Uses the all-in-one API.'],
-    ig_dp: ['Instagram <span>DP</span>', 'Enter a username below, or paste a profile link — downloads the full-size profile picture. Uses the all-in-one API.'],
+    ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real full-size profile picture. Uses the Instagram Profile API.'],
     ig_caption: ['Copy Reel <span>Caption</span>', 'Fetch a Reel, then copy its caption to the clipboard in one tap.'],
-    ig_bio: ['Copy <span>Bio</span>', 'Enter a username below — fetches the profile and copies the bio text. Uses the all-in-one API.'],
+    ig_bio: ['Copy <span>Bio</span>', 'Paste a profile link, or type a username or account ID — fetches the real bio from Instagram. Uses the Instagram Profile API.'],
     fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link — preview it, then download. Uses the all-in-one API.'],
     yt_short: ['YouTube <span>Short</span>', 'Paste a YouTube Shorts link (youtube.com/shorts/… or youtu.be/…) and download it.'],
     yt_full: ['YouTube <span>Video</span>', 'Paste a full YouTube video link (youtube.com/watch?v=…) and pick a quality.'],
@@ -740,6 +851,10 @@
     if (el.statRow) el.statRow.style.display = page === 'dashboard' ? '' : 'none';
     if (el.trendCard) el.trendCard.style.display = page === 'dashboard' ? '' : 'none';
     if (el.quickActions) el.quickActions.style.display = page === 'dashboard' ? '' : 'none';
+    // The "Download a Video" fetch card is removed from the Dashboard —
+    // the dashboard is Quick Actions + history + stats only. The card
+    // (URL box, Fetch button, DP/Bio helper) shows on every tool page.
+    if (el.fetchCard) el.fetchCard.style.display = page === 'dashboard' ? 'none' : '';
     if (el.qualityRow) el.qualityRow.style.display = 'none'; // renderPreview shows it again for YT/FB
     if (page !== 'converter') hideConvertProgress();
     if (el.converterCard) el.converterCard.style.display = page === 'converter' ? '' : 'none';
@@ -747,11 +862,14 @@
     const t = TOOL_TEXT[tool] || TOOL_TEXT.dashboard;
     el.pageTitle.innerHTML = t[0]; el.pageSub.textContent = t[1];
     el.fetchTitle.textContent = tool === 'dashboard' ? 'Download a Video'
-      : tool === 'ig_dp' ? 'Instagram username / profile URL'
-      : tool === 'ig_bio' ? 'Instagram username / profile URL'
+      : tool === 'ig_dp' ? 'Profile link or username'
+      : tool === 'ig_bio' ? 'Profile link or username'
       : tool === 'to_song' ? 'Paste video URL to extract the song'
       : 'Paste video URL';
     el.fetchHint.textContent = t[1];
+    if (el.urlInput) el.urlInput.placeholder = (tool === 'ig_dp' || tool === 'ig_bio')
+      ? 'Profile link or username — e.g. instagram.com/mr.kaifu_4u/ or mr.kaifu_4u'
+      : 'https://www.instagram.com/reel/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…';
     el.usernameRow.style.display = (tool === 'ig_dp' || tool === 'ig_bio') ? 'block' : 'none';
     el.sidebar.classList.remove('open'); el.backdrop.classList.remove('show');
     clearStatus();
@@ -827,7 +945,11 @@
     try { const t = await navigator.clipboard.readText(); if (t) { el.urlInput.value = t.trim(); setStatus('Pasted from clipboard.', 'info'); } }
     catch { setStatus('Clipboard read was blocked — paste with Ctrl+V / long-press instead.', 'err'); }
   });
-  document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('click', () => { el.urlInput.value = b.dataset.sample; el.urlInput.focus(); }));
+  document.querySelectorAll('[data-sample]').forEach(b => b.addEventListener('click', () => {
+    el.urlInput.value = b.dataset.sample; el.urlInput.focus();
+    const t = detectSwitchTarget(b.dataset.sample); // the sample IS a reel — open its section
+    if (t && t !== currentTool) setTool(t);
+  }));
   el.copyCaptionBtn.addEventListener('click', () => {
     if (currentResult && currentResult.caption) copyText(currentResult.caption, 'Caption copied to clipboard ✓');
     else setStatus('No caption on this video — fetch a Reel first.', 'err');
@@ -838,15 +960,14 @@
     else setStatus('Nothing to copy yet — fetch a video first.', 'err');
   });
   el.usernameBtn.addEventListener('click', () => {
-    // Accept a plain username ("mr.kaifu_4u"), "@mr.kaifu_4u", or a full
-    // profile link pasted in ("https://www.instagram.com/mr.kaifu_4u/").
-    // Never build instagram.com/https://… — strip any domain first.
-    let u = el.usernameInput.value.trim();
-    u = u.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
-         .replace(/^(www\.)?instagram\.com\//i, '')
-         .replace(/^@/, '').split(/[?#]/)[0].replace(/\/+$/, '').split('/')[0];
-    if (!u) { setStatus('Enter an Instagram username first.', 'err'); return; }
-    el.urlInput.value = 'https://www.instagram.com/' + u + '/';
+    // One helper for all three input forms: a full profile link, a bare
+    // username ("mr.kaifu_4u"), "@mr.kaifu_4u", or a numeric account ID.
+    // Never build instagram.com/https://… — the shared normaliser
+    // (profileInputOf) strips any domain first.
+    const ref = profileInputOf(el.usernameInput.value);
+    if (!ref) { setStatus('Enter a valid Instagram username or profile link.', 'err'); return; }
+    if (ref.username) el.urlInput.value = 'https://www.instagram.com/' + ref.username + '/';
+    else el.urlInput.value = ''; // numeric account ID — handleFetch reads the helper field
     handleFetch();
   });
   $('clearHistoryBtn').addEventListener('click', () => { localStorage.removeItem(STORE.history); renderHistory(); });
@@ -901,10 +1022,12 @@
     if (/youtube\.com\/watch/.test(raw) || /youtube\.com\/embed\/[^/]+/.test(u) || /music\.youtube\.com\/watch/.test(raw)) return 'yt_full';
     return null;
   }
-  el.urlInput.addEventListener('input', () => {
-    const t = detectSwitchTarget(el.urlInput.value);
-    if (t && t !== currentTool) setTool(t);
-  });
+  // NOTE: the URL box no longer auto-switches the tool while typing or
+  // pasting. Each section now validates strictly instead: a Facebook link
+  // pasted in the Reel section shows "This URL is invalid for Reel
+  // Download…" rather than silently jumping to another section. (The
+  // old auto-switch is what used to lock a half-typed reel URL to DP
+  // Download; the strict check replaces it.)
 
   applyAppSettings();
   renderQuota();

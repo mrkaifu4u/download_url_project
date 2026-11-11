@@ -42,13 +42,28 @@
  *   array it returns.
  *   Fallback noted in README: "YouTube FAST Downloader" free plan
  *   100 requests / month, 50 MB max file size.
+ *
+ * Instagram Profile (DP + Bio — the REAL profile data):
+ *   instagram-scraper-api-real-time-affordable.p.rapidapi.com
+ *   Endpoint:  GET https://{host}/api/v1/instagram/profile-info?username=<name>
+ *              (or ?user_id=<numeric account ID>)
+ *   Response:  { data: { id, username, full_name, biography,
+ *                follower_count, following_count, media_count,
+ *                is_private, is_verified, profile_pic_url,
+ *                profile_pic_url_hd } }
+ *   Free Basic plan: $0/month, 50 requests / month, hard limit
+ *   (verified on RapidAPI 2026-11-11). One call returns the bio AND
+ *   the full-size profile picture, so DP Download and Copy Bio share it.
+ *   The working Instagram /fetch API returns HTTP 400 for profile URLs,
+ *   so it cannot be used for DP/Bio.
  */
 const DEFAULT_RAPIDAPI_KEY = 'c109599a7fmshd1709ec3e60efc1p11e3bdjsn79d71c03eb68';
 
 const API_HOSTS = {
   instagram: 'instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com',
   allinone: 'social-media-downloader-api-pro.p.rapidapi.com',
-  youtube: 'youtube-downloader24.p.rapidapi.com'
+  youtube: 'youtube-downloader24.p.rapidapi.com',
+  ig_profile: 'instagram-scraper-api-real-time-affordable.p.rapidapi.com'
 };
 
 /**
@@ -62,7 +77,8 @@ const DEFAULT_LIMITS = {
   instagram: 500,
   youtube: 500,
   facebook: 100,
-  allinone: 200 // free Basic plan on RapidAPI: $0/mo, 200 req/mo, hard limit
+  allinone: 200, // free Basic plan on RapidAPI: $0/mo, 200 req/mo, hard limit
+  ig_profile: 50 // free Basic plan on RapidAPI: $0/mo, 50 req/mo, hard limit
 };
 
 /** localStorage keys used by the app. */
