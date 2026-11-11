@@ -204,7 +204,7 @@
     cv.width = w * dpr; cv.height = hgt * dpr; cv.style.height = hgt + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, hgt);
-    const padL = 34, padR = 10, padT = 12, padB = 26;
+    const padL = 34, padR = 16, padT = 12, padB = 26;
     const maxV = Math.max(1, ...data.map(x => x.count));
     const xAt = i => padL + (data.length === 1 ? (w - padL - padR) / 2 : i * (w - padL - padR) / (data.length - 1));
     const yAt = v => padT + (1 - v / maxV) * (hgt - padT - padB);
@@ -217,9 +217,17 @@
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
       ctx.fillText(String(v), 6, y + 4);
     }
-    // x labels (thin out for 30 days)
+    // x labels (thin out for 30 days). Anchor the first label left and the
+    // last label right so neither runs past the canvas edge (the last label
+    // used to clip to "Nov 1" instead of "Nov 11").
     const step = data.length > 14 ? 5 : data.length > 7 ? 2 : 1;
-    data.forEach((d, i) => { if (i % step === 0 || i === data.length - 1) ctx.fillText(d.label, xAt(i) - 14, hgt - 8); });
+    data.forEach((d, i) => {
+      if (i % step === 0 || i === data.length - 1) {
+        ctx.textAlign = i === 0 ? 'left' : i === data.length - 1 ? 'right' : 'center';
+        ctx.fillText(d.label, xAt(i), hgt - 8);
+      }
+    });
+    ctx.textAlign = 'left';
     // area fill + line + dots (red gradient, like the reference)
     const grad = ctx.createLinearGradient(0, padT, 0, hgt - padB);
     grad.addColorStop(0, 'rgba(232,17,45,.45)'); grad.addColorStop(1, 'rgba(232,17,45,0)');
