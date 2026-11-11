@@ -1033,4 +1033,8 @@
   renderQuota();
   renderHistory();
   renderSettings();
+  // Run the dashboard page setup on load too — setTool() is what hides
+  // the "Download a Video" fetch card on the dashboard, and without this
+  // call it only ran after a nav click, so a fresh load still showed it.
+  setTool('dashboard');
 })();
