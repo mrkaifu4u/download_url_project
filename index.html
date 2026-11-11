@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261111-2">
+<link rel="stylesheet" href="style.css?v=20261111-3">
 </head>
 <body>
 <div class="backdrop" id="backdrop"></div>
@@ -33,12 +33,6 @@
       <button class="nav-item" data-tool="to_song" data-page="converter"><span class="ico cv">♪</span> Video to Audio Converter</button>
     </nav>
 
-    <div class="sidebar-foot">
-      <b>Built-in key:</b> this app uses a key built into the public repo,
-      added by the owner so visitors can fetch without pasting one.
-      Every Fetch counts against the owner's RapidAPI quota — a key typed
-      in Settings overrides it.
-    </div>
   </aside>
 
   <!-- ================= Main ================= -->
@@ -112,6 +106,20 @@
           <button class="btn ghost" id="usernameBtn">Use username</button>
         </div>
         <p class="hint" style="margin-top:10px;">DP / Bio use the profile URL <code>instagram.com/&lt;username&gt;/</code> through the all-in-one API. If that API is not subscribed, the app will say so instead of failing silently.</p>
+      </div>
+    </section>
+
+    <!-- ===== History ===== -->
+    <section class="card" id="historyCard">
+      <div class="card-head">
+        <h2><span class="dot">●</span> Recent Downloads</h2>
+        <button class="btn ghost small" id="viewAllBtn">View All →</button>
+      </div>
+      <p class="hint">Kept in this browser only. Every fetch is also logged to the owner's Google Sheet when its Apps Script URL is saved in this browser.</p>
+      <div class="history-list" id="historyList"></div>
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn ghost small" id="clearHistoryBtn">Clear history</button>
+        <button class="btn ghost small" id="exportHistoryBtn">Export history (CSV)</button>
       </div>
     </section>
 
@@ -212,26 +220,7 @@
       </div>
     </section>
 
-    <!-- ===== Quota ===== -->
-    <section class="card" id="quotaCard">
-      <h2><span class="dot">●</span> Free-Plan Usage — This Month</h2>
-      <p class="hint">Every Fetch uses <b>1 API call</b>. Downloading the file itself costs nothing extra. Limits reset on the <b>1st of next month</b>. Edit limits in Settings below if your plan differs.</p>
-      <div class="quota-grid" id="quotaGrid"></div>
-    </section>
 
-    <!-- ===== History ===== -->
-    <section class="card" id="historyCard">
-      <div class="card-head">
-        <h2><span class="dot">●</span> Recent Downloads</h2>
-        <button class="btn ghost small" id="viewAllBtn">View All →</button>
-      </div>
-      <p class="hint">Kept in this browser only. Every fetch is also logged to your Google Sheet when an Apps Script URL is set in Settings.</p>
-      <div class="history-list" id="historyList"></div>
-      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn ghost small" id="clearHistoryBtn">Clear history</button>
-        <button class="btn ghost small" id="exportHistoryBtn">Export history (CSV)</button>
-      </div>
-    </section>
 
     <!-- ===== Usage trend (dashboard page only) ===== -->
     <section class="card" id="trendCard">
@@ -258,44 +247,12 @@
       </div>
     </section>
 
-    <!-- ===== Settings ===== -->
-    <section class="card" id="settingsCard">
-      <h2><span class="dot">●</span> Settings</h2>
-      <p class="hint">Keys typed here are stored <b>only in this browser's localStorage</b>. They are sent only to RapidAPI when you press Fetch.</p>
-      <div class="warn"><b>⚠ Built-in key is public.</b> This app ships with a RapidAPI key built in (config.js), added by the owner so visitors can fetch without pasting one. Anyone can view it in the public repo, and every Fetch counts against the owner's quota. A key typed here overrides the built-in one. If the quota is abused, rotate the key on RapidAPI.</div>
 
-      <div class="settings-grid">
-        <div>
-          <div class="field">
-            <label for="apiKeyInput">RapidAPI key</label>
-            <input type="password" id="apiKeyInput" placeholder="YOUR_RAPIDAPI_KEY" autocomplete="off">
-            <p class="note">One key works for every RapidAPI host below (same RapidAPI account). Show/hide with the button. Leave blank to use the built-in key.</p>
-          </div>
-          <div class="field">
-            <label for="appsScriptInput">Google Apps Script web-app URL</label>
-            <input type="url" id="appsScriptInput" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
-            <p class="note">From <code>apps-script/Code.gs</code> — deploy as Web App, Execute as Me, Anyone. Leave empty to keep history in this browser only.</p>
-          </div>
-        </div>
-        <div>
-          <div class="field">
-            <label>Monthly limits (free plan)</label>
-            <div class="limits-row">
-              <div class="field"><label for="limitIg">Instagram</label><input type="number" id="limitIg" min="0" step="1"></div>
-              <div class="field"><label for="limitYt">YouTube</label><input type="number" id="limitYt" min="0" step="1"></div>
-              <div class="field"><label for="limitFb">Facebook</label><input type="number" id="limitFb" min="0" step="1"></div>
-              <div class="field"><label for="limitAll">All-in-one</label><input type="number" id="limitAll" min="0" step="1"></div>
-            </div>
-            <p class="note">Defaults: Instagram 500, YouTube 500, Facebook 100, All-in-one 100 / month.</p>
-          </div>
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="btn small" id="saveSettingsBtn">Save settings</button>
-            <button class="btn ghost small" id="toggleKeyBtn">Show key</button>
-            <button class="btn ghost small" id="testSheetBtn">Test Sheet connection</button>
-          </div>
-          <p class="hint" id="settingsMsg" style="margin-top:12px;"></p>
-        </div>
-      </div>
+    <!-- ===== Quota ===== -->
+    <section class="card" id="quotaCard">
+      <h2><span class="dot">●</span> Free-Plan Usage — This Month</h2>
+      <p class="hint">Every Fetch uses <b>1 API call</b>. Downloading the file itself costs nothing extra. Limits reset on the <b>1st of next month</b>.</p>
+      <div class="quota-grid" id="quotaGrid"></div>
     </section>
 
     <p class="legal">
@@ -306,7 +263,7 @@
   </main>
 </div>
 
-<script src="config.js?v=20261111-2"></script>
-<script src="app.js?v=20261111-2"></script>
+<script src="config.js?v=20261111-3"></script>
+<script src="app.js?v=20261111-3"></script>
 </body>
 </html>

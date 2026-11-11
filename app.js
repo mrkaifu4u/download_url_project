@@ -3,8 +3,11 @@
    Flow: paste URL -> Fetch (1 API call) -> preview on screen ->
          pick quality -> Download straight to PC / phone.
    A built-in RapidAPI key (config.js, owner's choice, public repo) is
-   used when no key is saved in Settings; a saved key overrides it.
-   Keys typed in Settings live ONLY in localStorage (vd_settings).
+   used when no key is saved in this browser; a saved key overrides it.
+   The key, Apps Script URL and limits live ONLY in localStorage
+   (vd_settings) — there is no Settings section in the user app;
+   the owner sets them from the admin panel or by saving them
+   in the browser's localStorage.
    except: the RapidAPI host you fetch from, and your own Apps Script URL.
    ========================================================================== */
 (function () {
@@ -326,7 +329,7 @@
     renderHistory();
     // 2) If an Apps Script URL is set, POST the same row there.
     if (!settings.appsScriptUrl) {
-      setStatus('Saved to local history. Tip: add your Apps Script URL in Settings to also log it to Google Sheets.', 'info');
+      setStatus('Saved to local history. (Sheet logging needs the Apps Script URL saved in this browser.)', 'info');
       return;
     }
     try {
@@ -337,7 +340,7 @@
       });
       setStatus('Logged to Google Sheet ✓ (tab: downloader_data).', 'ok');
     } catch (e) {
-      setStatus('Saved locally, but the Sheet log failed — check the Apps Script URL in Settings.', 'err');
+      setStatus('Saved locally, but the Sheet log failed — check the saved Apps Script URL.', 'err');
     }
   }
 
@@ -365,8 +368,7 @@
   /* ---------- API calls ---------- */
   function needKey() {
     if (!settings.rapidapiKey) {
-      setStatus('Add your RapidAPI key in Settings first — it is stored only in this browser. (Or press “Demo preview” to see the layout without a key.)', 'err');
-      document.getElementById('settingsCard').scrollIntoView({ behavior: 'smooth' });
+      setStatus('No RapidAPI key is available — the built-in key is missing. (Or press “Demo preview” to see the layout without a key.)', 'err');
       return false;
     }
     return true;
@@ -485,7 +487,7 @@
       return;
     }
     if (quotaLeft(bucket) <= 0) {
-      setStatus('Monthly limit reached for ' + bucket + ' (' + settings.limits[bucket] + '/month). It resets ' + nextResetDate() + ' — or raise the limit in Settings if you upgraded your plan.', 'err');
+      setStatus('Monthly limit reached for ' + bucket + ' (' + settings.limits[bucket] + '/month). It resets ' + nextResetDate() + '.', 'err');
       return;
     }
     if (!needKey()) return;
@@ -734,8 +736,13 @@
     }
   }
 
-  /* ---------- settings panel ---------- */
+  /* ---------- settings panel (removed from the user app 2026-11-11:
+     no Settings section in index.html any more. The form fields are
+     gone, so these functions must do nothing instead of crashing
+     on the missing elements. Values already saved in localStorage
+     keep working — loadSettings() still reads them.) ---------- */
   function renderSettings() {
+    if (!el.apiKeyInput || !el.appsScriptInput) return;
     el.apiKeyInput.value = settings.rapidapiKey || '';
     el.appsScriptInput.value = settings.appsScriptUrl || '';
     $('limitIg').value = settings.limits.instagram;
@@ -744,6 +751,7 @@
     $('limitAll').value = settings.limits.allinone;
   }
   function saveSettingsFromForm() {
+    if (!el.apiKeyInput || !el.appsScriptInput) return;
     settings = {
       rapidapiKey: el.apiKeyInput.value.trim(),
       appsScriptUrl: el.appsScriptInput.value.trim(),
@@ -814,13 +822,15 @@
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     a.download = 'downloader_history.csv'; a.click();
   });
-  $('saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
-  $('toggleKeyBtn').addEventListener('click', () => {
+  // Settings buttons were removed with the Settings section (2026-11-11);
+  // guard so the missing elements cannot throw at startup.
+  if ($('saveSettingsBtn')) $('saveSettingsBtn').addEventListener('click', saveSettingsFromForm);
+  if ($('toggleKeyBtn')) $('toggleKeyBtn').addEventListener('click', () => {
     const show = el.apiKeyInput.type === 'password';
     el.apiKeyInput.type = show ? 'text' : 'password';
     $('toggleKeyBtn').textContent = show ? 'Hide key' : 'Show key';
   });
-  $('testSheetBtn').addEventListener('click', async () => {
+  if ($('testSheetBtn')) $('testSheetBtn').addEventListener('click', async () => {
     saveSettingsFromForm();
     if (!settings.appsScriptUrl) { el.settingsMsg.textContent = 'Paste your Apps Script web-app URL first.'; return; }
     try {
