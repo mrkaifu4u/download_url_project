@@ -28,12 +28,23 @@
     progress: $('progress'), progressBar: $('progressBar'), progressText: $('progressText'),
     downloadNote: $('downloadNote'), quotaGrid: $('quotaGrid'),
     historyList: $('historyList'), apiKeyInput: $('apiKeyInput'),
+    statTotal: $('statTotal'), statUrls: $('statUrls'), statMonth: $('statMonth'), statApi: $('statApi'),
+    statRow: $('statRow'), trendCard: $('trendCard'), trendChart: $('trendChart'),
+    trendEmpty: $('trendEmpty'), trendThisMonth: $('trendThisMonth'), trendChange: $('trendChange'),
+    trendRange: $('trendRange'), tabsBar: $('tabsBar'), converterCard: $('converterCard'),
+    audioFileInput: $('audioFileInput'), audioFileName: $('audioFileName'),
+    audioFormat: $('audioFormat'), audioQuality: $('audioQuality'), convertBtn: $('convertBtn'),
+    viewAllBtn: $('viewAllBtn'), drawerClose: $('drawerClose'),
     appsScriptInput: $('appsScriptInput'), settingsMsg: $('settingsMsg')
   };
 
   let currentTool = 'dashboard';
   let currentResult = null;   // normalised fetch result
   let selectedQuality = null; // chosen format object
+  let showAllHistory = false;
+  let trendDays = 7;
+  let audioFormatChoice = 'mp3';
+  let audioQualityChoice = '192';
 
   /* ---------- settings (localStorage only) ---------- */
   function loadSettings() {
@@ -92,6 +103,105 @@
         '<p>' + r.host + '</p>' +
         '<p class="reset">Resets <b>' + nextResetDate() + '</b></p></div>';
     }).join('');
+    renderStats();
+  }
+
+  /* ---------- dashboard stats + trend (all from REAL local data) ---------- */
+  function sumQuotaAll() {
+    const q = loadQuota(); let total = 0;
+    Object.values(q).forEach(m => Object.values(m).forEach(n => { total += Number(n) || 0; }));
+    return total;
+  }
+  function sumQuotaMonth(d) {
+    const q = loadQuota(); const m = monthKey(d);
+    return Object.values(q[m] || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+  }
+  function renderStats() {
+    const h = loadHistory();
+    const totalDownloads = h.length;                 // every logged fetch, all time
+    const urlsProcessed = sumQuotaAll();             // every Fetch = 1 URL processed
+    const thisMonth = sumQuotaMonth(new Date());     // quota used this month
+    const totalLimit = Object.values(settings.limits).reduce((s, n) => s + (Number(n) || 0), 0);
+    const available = Math.max(0, totalLimit - thisMonth);
+    if (el.statTotal) el.statTotal.textContent = totalDownloads.toLocaleString('en-US');
+    if (el.statUrls) el.statUrls.textContent = urlsProcessed.toLocaleString('en-US');
+    if (el.statMonth) el.statMonth.textContent = thisMonth.toLocaleString('en-US');
+    if (el.statApi) el.statApi.textContent = available.toLocaleString('en-US');
+    if (el.trendThisMonth) el.trendThisMonth.textContent = thisMonth.toLocaleString('en-US');
+    drawTrend();
+  }
+  function historyDateKey(d) { // history stores en-GB dates (DD/MM/YYYY)
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
+  function trendCounts(days) {
+    const h = loadHistory();
+    const out = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = historyDateKey(d);
+      out.push({ label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), count: h.filter(x => x.date === key).length });
+    }
+    return out;
+  }
+  function drawTrend() {
+    const cv = el.trendChart; if (!cv) return;
+    const data = trendCounts(trendDays);
+    const total = data.reduce((s, x) => s + x.count, 0);
+    if (el.trendEmpty) el.trendEmpty.style.display = total === 0 ? 'block' : 'none';
+    // Change vs the previous equal-length period (real, computed — never invented).
+    const prev = (() => {
+      const h = loadHistory(); let n = 0;
+      for (let i = trendDays; i < trendDays * 2; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        n += h.filter(x => x.date === historyDateKey(d)).length;
+      }
+      return n;
+    })();
+    if (el.trendChange) {
+      if (total === 0 && prev === 0) { el.trendChange.textContent = 'No data yet'; el.trendChange.className = 'trend-pill flat'; }
+      else if (prev === 0) { el.trendChange.textContent = '▲ New this period'; el.trendChange.className = 'trend-pill'; }
+      else {
+        const pct = Math.round((total - prev) / prev * 100);
+        el.trendChange.textContent = (pct >= 0 ? '▲ +' : '▼ ') + pct + '%';
+        el.trendChange.className = 'trend-pill' + (pct < 0 ? ' down' : '');
+      }
+    }
+    const ctx = cv.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth || 600, hgt = 220;
+    cv.width = w * dpr; cv.height = hgt * dpr; cv.style.height = hgt + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, hgt);
+    const padL = 34, padR = 10, padT = 12, padB = 26;
+    const maxV = Math.max(1, ...data.map(x => x.count));
+    const xAt = i => padL + (data.length === 1 ? (w - padL - padR) / 2 : i * (w - padL - padR) / (data.length - 1));
+    const yAt = v => padT + (1 - v / maxV) * (hgt - padT - padB);
+    // gridlines + y labels (0..max)
+    ctx.font = '11px Archivo, sans-serif'; ctx.fillStyle = '#a9a7a2';
+    ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1;
+    const steps = Math.min(5, maxV);
+    for (let s = 0; s <= steps; s++) {
+      const v = Math.round(maxV * s / steps), y = yAt(v);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      ctx.fillText(String(v), 6, y + 4);
+    }
+    // x labels (thin out for 30 days)
+    const step = data.length > 14 ? 5 : data.length > 7 ? 2 : 1;
+    data.forEach((d, i) => { if (i % step === 0 || i === data.length - 1) ctx.fillText(d.label, xAt(i) - 14, hgt - 8); });
+    // area fill + line + dots (red gradient, like the reference)
+    const grad = ctx.createLinearGradient(0, padT, 0, hgt - padB);
+    grad.addColorStop(0, 'rgba(232,17,45,.45)'); grad.addColorStop(1, 'rgba(232,17,45,0)');
+    ctx.beginPath();
+    data.forEach((d, i) => { i === 0 ? ctx.moveTo(xAt(i), yAt(d.count)) : ctx.lineTo(xAt(i), yAt(d.count)); });
+    ctx.lineTo(xAt(data.length - 1), hgt - padB); ctx.lineTo(xAt(0), hgt - padB); ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath();
+    data.forEach((d, i) => { i === 0 ? ctx.moveTo(xAt(i), yAt(d.count)) : ctx.lineTo(xAt(i), yAt(d.count)); });
+    ctx.strokeStyle = '#ff2e4d'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+    data.forEach((d, i) => {
+      ctx.beginPath(); ctx.arc(xAt(i), yAt(d.count), 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#0d0d12'; ctx.fill(); ctx.strokeStyle = '#ff2e4d'; ctx.lineWidth = 2; ctx.stroke();
+    });
   }
 
   /* ---------- history (localStorage) ---------- */
@@ -100,13 +210,22 @@
   }
   function renderHistory() {
     const h = loadHistory();
-    if (!h.length) { el.historyList.innerHTML = '<p class="empty">No downloads yet — paste a link above and press Fetch.</p>'; return; }
-    el.historyList.innerHTML = h.slice(0, 20).map(item =>
-      '<div class="history-item"><div><div class="h-url">' + escapeHtml(item.video_url) + '</div>' +
-      '<div class="h-meta">' + escapeHtml(item.date + ' ' + item.time) + ' · ' + escapeHtml(item.device) +
-      ' · ' + escapeHtml(item.city || 'unknown location') + ' · Quality: ' + escapeHtml(item.quality || '—') + '</div></div>' +
-      '<span class="h-badge">' + escapeHtml(item.platform) + ' · ' + escapeHtml(item.tool) + '</span></div>'
-    ).join('');
+    if (!h.length) { el.historyList.innerHTML = '<p class="empty">No downloads yet — paste a link above and press Fetch.</p>'; if (el.viewAllBtn) el.viewAllBtn.style.display = 'none'; return; }
+    if (el.viewAllBtn) { el.viewAllBtn.style.display = ''; el.viewAllBtn.textContent = showAllHistory ? 'Show less ↑' : 'View All →'; }
+    const shown = showAllHistory ? h.slice(0, 100) : h.slice(0, 6);
+    const platIcon = { instagram: '◉', youtube: '▶', facebook: 'f', allinone: '♪' };
+    el.historyList.innerHTML = '<table class="history-table"><thead><tr><th>#</th><th>Platform</th><th>Video Title</th><th>Format</th><th>Downloaded On</th><th></th></tr></thead><tbody>' +
+      shown.map((item, i) =>
+        '<tr><td data-label="#">' + (i + 1) + '</td>' +
+        '<td data-label="Platform"><span class="plat"><i>' + (platIcon[item.platform] || '▶') + '</i>' + escapeHtml(item.platform) + '</span></td>' +
+        '<td data-label="Video Title"><div class="h-title">' + escapeHtml(item.video_url) + '</div>' +
+        '<div class="h-sub">' + escapeHtml(item.tool || '') + ' · ' + escapeHtml(item.city || 'unknown location') + '</div></td>' +
+        '<td data-label="Format"><span class="fmt-pill">' + escapeHtml(item.format || item.quality || '—') + '</span></td>' +
+        '<td data-label="Downloaded On">' + escapeHtml(item.date + ' ' + item.time) + '</td>' +
+        '<td data-label="" class="h-action"><button class="icon-btn" data-copy-url="' + escapeHtml(item.video_url) + '" title="Copy video link">⧉</button></td></tr>'
+      ).join('') + '</tbody></table>';
+    el.historyList.querySelectorAll('[data-copy-url]').forEach(b => b.addEventListener('click', () => copyText(b.dataset.copyUrl, 'Video link copied ✓')));
+    renderStats();
   }
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -332,6 +451,8 @@
       if (tool === 'to_song') {
         const audio = result.formats.filter(f => /mp3|m4a|aac|audio/i.test(f.ext + ' ' + f.quality));
         if (audio.length) result.formats = audio;
+        const wanted = audio.filter(f => (f.ext || '').toLowerCase() === audioFormatChoice);
+        if (wanted.length) result.formats = wanted; // prefer the format picked in the converter
         result.isAudio = true;
       }
 
@@ -357,6 +478,7 @@
       device: detectDevice(),
       platform, tool, video_url: url,
       quality: (selectedQuality && selectedQuality.quality) || '',
+      format: (selectedQuality && selectedQuality.ext || '').toUpperCase(),
       city: loc.city + (loc.source ? ' (' + loc.source + ')' : ''),
       lat: loc.lat, lng: loc.lng,
       mapsLink: (loc.lat !== '' && loc.lng !== '')
@@ -485,9 +607,21 @@
     yt_full: ['YouTube <span>Video</span>', 'Paste a full YouTube video link (youtube.com/watch?v=…) and pick a quality.'],
     to_song: ['Video to <span>Song</span>', 'Paste any video link — the audio-only format is downloaded as .mp3 / .m4a. The browser cannot transcode video locally.']
   };
+  const PAGE_FOR_TOOL = { dashboard: 'dashboard', ig_reel: 'instagram', ig_story: 'instagram', ig_dp: 'instagram', ig_caption: 'instagram', ig_bio: 'instagram', fb_video: 'facebook', yt_short: 'youtube', yt_full: 'youtube', to_song: 'converter' };
   function setTool(tool) {
     currentTool = tool;
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+    const page = PAGE_FOR_TOOL[tool] || 'dashboard';
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+    // feature tabs: show the group for this page, mark the current tool's tab
+    if (el.tabsBar) {
+      el.tabsBar.style.display = page === 'dashboard' ? 'none' : 'block';
+      document.querySelectorAll('.tabs[data-tabs]').forEach(g => { g.style.display = g.dataset.tabs === page ? 'flex' : 'none'; });
+      document.querySelectorAll('.tab[data-tab-tool]').forEach(t => t.classList.toggle('active', t.dataset.tabTool === tool));
+    }
+    if (el.statRow) el.statRow.style.display = page === 'dashboard' ? '' : 'none';
+    if (el.trendCard) el.trendCard.style.display = page === 'dashboard' ? '' : 'none';
+    if (el.converterCard) el.converterCard.style.display = page === 'converter' ? '' : 'none';
+    if (page === 'dashboard') renderStats();
     const t = TOOL_TEXT[tool] || TOOL_TEXT.dashboard;
     el.pageTitle.innerHTML = t[0]; el.pageSub.textContent = t[1];
     el.fetchTitle.textContent = tool === 'ig_dp' ? 'Instagram username / profile URL'
@@ -536,6 +670,19 @@
 
   /* ---------- wire up ---------- */
   document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+  document.querySelectorAll('.tab[data-tab-tool]').forEach(t => t.addEventListener('click', () => setTool(t.dataset.tabTool)));
+  if (el.drawerClose) el.drawerClose.addEventListener('click', () => { el.sidebar.classList.remove('open'); el.backdrop.classList.remove('show'); });
+  if (el.viewAllBtn) el.viewAllBtn.addEventListener('click', () => { showAllHistory = !showAllHistory; renderHistory(); });
+  if (el.trendRange) el.trendRange.addEventListener('change', () => { trendDays = Number(el.trendRange.value) || 7; drawTrend(); });
+  if (el.convertBtn) el.convertBtn.addEventListener('click', () => { if (currentTool !== 'to_song') setTool('to_song'); handleFetch(); });
+  if (el.audioFormat) el.audioFormat.addEventListener('change', () => { audioFormatChoice = el.audioFormat.value; });
+  if (el.audioQuality) el.audioQuality.addEventListener('change', () => { audioQualityChoice = el.audioQuality.value; });
+  if (el.audioFileInput) el.audioFileInput.addEventListener('change', () => {
+    const f = el.audioFileInput.files && el.audioFileInput.files[0];
+    if (el.audioFileName) el.audioFileName.textContent = f ? 'Chosen: ' + f.name + ' — uploads are not converted in the browser; paste a video URL above to extract audio via the API.' : 'No file chosen.';
+  });
+  let trendResizeT = null;
+  window.addEventListener('resize', () => { clearTimeout(trendResizeT); trendResizeT = setTimeout(drawTrend, 200); });
   el.hamburger.addEventListener('click', () => { el.sidebar.classList.add('open'); el.backdrop.classList.add('show'); });
   el.backdrop.addEventListener('click', () => { el.sidebar.classList.remove('open'); el.backdrop.classList.remove('show'); });
   el.fetchBtn.addEventListener('click', handleFetch);

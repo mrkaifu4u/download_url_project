@@ -14,8 +14,9 @@
 <div class="backdrop" id="backdrop"></div>
 <div class="app">
 
-  <!-- ================= Sidebar ================= -->
-  <aside class="sidebar" id="sidebar" aria-label="Tools">
+  <!-- ================= Sidebar (desktop: fixed · mobile: slide-out drawer) ================= -->
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
+    <button class="drawer-close" id="drawerClose" aria-label="Close menu">✕</button>
     <div class="brand">
       <div class="brand-mark">▶</div>
       <div>
@@ -24,37 +25,19 @@
       </div>
     </div>
 
-    <button class="nav-item active" data-tool="dashboard"><span class="ico">▦</span> Dashboard</button>
-
-    <div class="nav-group">
-      <p>Instagram</p>
-      <button class="nav-item" data-tool="ig_reel"><span class="ico">🎬</span> Reel Download</button>
-      <button class="nav-item" data-tool="ig_story"><span class="ico">⏱</span> Story Download</button>
-      <button class="nav-item" data-tool="ig_dp"><span class="ico">👤</span> DP Download</button>
-      <button class="nav-item" data-tool="ig_caption"><span class="ico">📋</span> Copy Reel Caption</button>
-      <button class="nav-item" data-tool="ig_bio"><span class="ico">✍</span> Copy Bio</button>
-    </div>
-
-    <div class="nav-group">
-      <p>Facebook</p>
-      <button class="nav-item" data-tool="fb_video"><span class="ico">📘</span> Video Download</button>
-    </div>
-
-    <div class="nav-group">
-      <p>YouTube</p>
-      <button class="nav-item" data-tool="yt_short"><span class="ico">⚡</span> Short Download</button>
-      <button class="nav-item" data-tool="yt_full"><span class="ico">▶</span> Full Video Download</button>
-    </div>
-
-    <div class="nav-group">
-      <p>Converter</p>
-      <button class="nav-item" data-tool="to_song"><span class="ico">♪</span> Video to Song <span class="tag">MP3</span></button>
-    </div>
+    <nav class="nav-list">
+      <button class="nav-item active" data-tool="dashboard" data-page="dashboard"><span class="ico">▦</span> Dashboard</button>
+      <button class="nav-item" data-tool="ig_reel" data-page="instagram"><span class="ico ig">◉</span> Instagram</button>
+      <button class="nav-item" data-tool="yt_short" data-page="youtube"><span class="ico yt">▶</span> YouTube</button>
+      <button class="nav-item" data-tool="fb_video" data-page="facebook"><span class="ico fb">f</span> Facebook</button>
+      <button class="nav-item" data-tool="to_song" data-page="converter"><span class="ico cv">♪</span> Video to Audio Converter</button>
+    </nav>
 
     <div class="sidebar-foot">
-      <b>Free-plan quotas</b> are shown on the Dashboard.<br>
-      1 paste + Fetch = 1 API call.<br>
-      Your key never leaves this browser.
+      <b>Built-in key:</b> this app uses a key built into the public repo,
+      added by the owner so visitors can fetch without pasting one.
+      Every Fetch counts against the owner's RapidAPI quota — a key typed
+      in Settings overrides it.
     </div>
   </aside>
 
@@ -62,30 +45,75 @@
   <main class="main">
     <div class="topbar">
       <button class="hamburger" id="hamburger" aria-label="Open menu">☰</button>
-      <div>
+      <div class="topbar-brand" aria-hidden="true">
+        <div class="brand-mark">▶</div>
+        <div><strong>Video</strong><span>Downloader</span><small>by Kaifoddin</small></div>
+      </div>
+      <div class="page-head">
         <h1 class="page-title" id="pageTitle">Dash<span>board</span></h1>
         <p class="page-sub" id="pageSub">Paste a video link, preview it, pick a quality and download — straight to your PC or phone.</p>
       </div>
       <div class="spacer"></div>
-      <div class="pill-badge">This month · <b id="monthLabel">—</b></div>
+      <div class="topbar-icons" aria-hidden="true"><span class="bell">🔔<i></i></span><span class="avatar">👤</span></div>
+      <div class="pill-badge">📅 This Month · <b id="monthLabel">—</b></div>
     </div>
 
-    <div class="wordmark" aria-hidden="true">DOWN<em>LOAD</em></div>
+    <!-- ===== Feature tabs (shown on Instagram / YouTube / Facebook / Converter pages) ===== -->
+    <div class="tabs-bar" id="tabsBar" style="display:none;">
+      <div class="tabs" data-tabs="instagram">
+        <button class="tab active" data-tab-tool="ig_reel">Reel Download</button>
+        <button class="tab" data-tab-tool="ig_story">Story Download</button>
+        <button class="tab" data-tab-tool="ig_dp">DP Download</button>
+        <button class="tab" data-tab-tool="ig_caption">Copy Reel Caption</button>
+        <button class="tab" data-tab-tool="ig_bio">Copy Bio</button>
+      </div>
+      <div class="tabs" data-tabs="youtube" style="display:none;">
+        <button class="tab active" data-tab-tool="yt_short">Short Download</button>
+        <button class="tab" data-tab-tool="yt_full">Full Video Download</button>
+      </div>
+      <div class="tabs" data-tabs="facebook" style="display:none;">
+        <button class="tab active" data-tab-tool="fb_video">Facebook Video Download</button>
+      </div>
+      <div class="tabs" data-tabs="converter" style="display:none;">
+        <button class="tab active" data-tab-tool="to_song">Video to Audio</button>
+      </div>
+    </div>
 
-    <!-- ===== Fetch card (shown for every tool except Dashboard-only view) ===== -->
-    <section class="card" id="fetchCard">
-      <h2><span class="dot">●</span> <span id="fetchTitle">Paste video URL</span></h2>
-      <p class="hint" id="fetchHint">Supports Instagram Reels, Facebook videos, YouTube Shorts &amp; full videos. The app auto-detects the platform from the link.</p>
+    <!-- ===== Dashboard stat cards (dashboard page only) ===== -->
+    <section class="stat-row" id="statRow" aria-label="This month at a glance">
+      <div class="stat pink">
+        <div class="stat-ico">⬇</div>
+        <div><p>Total Downloads</p><strong id="statTotal">0</strong></div>
+      </div>
+      <div class="stat purple">
+        <div class="stat-ico">🔗</div>
+        <div><p>URLs Processed</p><strong id="statUrls">0</strong></div>
+      </div>
+      <div class="stat teal">
+        <div class="stat-ico">🎞</div>
+        <div><p>This Month</p><strong id="statMonth">0</strong></div>
+      </div>
+      <div class="stat amber">
+        <div class="stat-ico">↻</div>
+        <div><p>Available API</p><strong id="statApi">0</strong></div>
+      </div>
+    </section>
+
+    <!-- ===== Fetch card ===== -->
+    <section class="card fetch-card" id="fetchCard">
+      <h2><span class="dot">●</span> <span id="fetchTitle">Paste Video URL</span></h2>
+      <p class="hint" id="fetchHint">Paste a video link, preview it, pick a quality and download — straight to your PC or phone.</p>
 
       <div class="url-row">
-        <input type="url" id="urlInput" placeholder="https://www.instagram.com/reels/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…" autocomplete="off" spellcheck="false">
-        <button class="btn" id="fetchBtn">Fetch video</button>
+        <span class="url-ico">🔗</span>
+        <input type="url" id="urlInput" placeholder="https://www.instagram.com/reel/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…" autocomplete="off" spellcheck="false">
+        <button class="btn" id="fetchBtn">▶ Fetch Video</button>
       </div>
 
       <div class="quick-row">
         <span>Try:</span>
-        <button class="chip" data-sample="https://www.instagram.com/reels/DeEvB06NaqX/">IG Reel sample</button>
-        <button class="chip" id="demoBtn">▶ Demo preview (no key needed)</button>
+        <button class="chip" data-sample="https://www.instagram.com/reels/DeEvB06NaqX/">◉ IG Reel sample</button>
+        <button class="chip" id="demoBtn">▶ Demo preview</button>
         <button class="chip" id="pasteBtn">📋 Paste from clipboard</button>
       </div>
 
@@ -99,6 +127,37 @@
         </div>
         <p class="hint" style="margin-top:10px;">DP / Bio use the profile URL <code>instagram.com/&lt;username&gt;/</code> through the all-in-one API. If that API is not subscribed, the app will say so instead of failing silently.</p>
       </div>
+    </section>
+
+    <!-- ===== Video-to-Audio converter options (converter page only) ===== -->
+    <section class="card converter-card" id="converterCard" style="display:none;">
+      <h2><span class="dot">●</span> Video to Audio Converter</h2>
+      <p class="hint">Paste a video URL above (or pick a local file to see its name) and press Convert — the audio stream returned by the API is downloaded as MP3 / M4A.</p>
+      <div class="converter-grid">
+        <div class="field">
+          <label for="audioFileInput">Upload a video file (optional)</label>
+          <label class="file-pick" for="audioFileInput">📁 Choose file</label>
+          <input type="file" id="audioFileInput" accept="video/*,audio/*" hidden>
+          <p class="note" id="audioFileName">No file chosen.</p>
+        </div>
+        <div class="field">
+          <label for="audioFormat">Audio format</label>
+          <select id="audioFormat">
+            <option value="mp3" selected>MP3</option>
+            <option value="m4a">M4A</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="audioQuality">Audio quality</label>
+          <select id="audioQuality">
+            <option value="128">128 kbps</option>
+            <option value="192" selected>192 kbps</option>
+            <option value="320">320 kbps</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" id="convertBtn">♪ Convert to Audio</button>
+      <p class="hint" style="margin-top:12px;">Honest note: a browser cannot transcode video locally, so a local file upload is <b>not</b> converted on your device — use the video URL above to extract audio via the API. The quality you pick is requested from the API where it is supported; the API returns the audio stream it has.</p>
     </section>
 
     <!-- ===== Preview ===== -->
@@ -133,14 +192,17 @@
 
     <!-- ===== Quota ===== -->
     <section class="card" id="quotaCard">
-      <h2><span class="dot">●</span> Free-plan usage — this month</h2>
+      <h2><span class="dot">●</span> Free-Plan Usage — This Month</h2>
       <p class="hint">Every Fetch uses <b>1 API call</b>. Downloading the file itself costs nothing extra. Limits reset on the <b>1st of next month</b>. Edit limits in Settings below if your plan differs.</p>
       <div class="quota-grid" id="quotaGrid"></div>
     </section>
 
     <!-- ===== History ===== -->
-    <section class="card">
-      <h2><span class="dot">●</span> Recent downloads</h2>
+    <section class="card" id="historyCard">
+      <div class="card-head">
+        <h2><span class="dot">●</span> Recent Downloads</h2>
+        <button class="btn ghost small" id="viewAllBtn">View All →</button>
+      </div>
       <p class="hint">Kept in this browser only. Every fetch is also logged to your Google Sheet when an Apps Script URL is set in Settings.</p>
       <div class="history-list" id="historyList"></div>
       <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
@@ -149,18 +211,43 @@
       </div>
     </section>
 
+    <!-- ===== Usage trend (dashboard page only) ===== -->
+    <section class="card" id="trendCard">
+      <div class="card-head">
+        <h2><span class="dot">●</span> Usage Trend</h2>
+        <select id="trendRange" aria-label="Trend range">
+          <option value="7" selected>Last 7 Days</option>
+          <option value="14">Last 14 Days</option>
+          <option value="30">Last 30 Days</option>
+        </select>
+      </div>
+      <p class="hint">Downloads per day, counted from your real history in this browser.</p>
+      <div class="trend-wrap">
+        <div class="trend-chart">
+          <canvas id="trendChart" height="220" aria-label="Downloads per day chart"></canvas>
+          <p class="empty" id="trendEmpty" style="display:none;">No downloads in this period yet — the chart will grow as you fetch videos.</p>
+        </div>
+        <div class="trend-side">
+          <div class="stat-ico">⬇</div>
+          <p>This Month</p>
+          <strong id="trendThisMonth">0</strong>
+          <span class="trend-pill" id="trendChange">No data yet</span>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== Settings ===== -->
     <section class="card" id="settingsCard">
       <h2><span class="dot">●</span> Settings</h2>
-      <p class="hint">Keys are stored <b>only in this browser's localStorage</b>. They are never sent to any server except RapidAPI when you press Fetch, and never committed to git.</p>
-      <div class="warn"><b>⚠ Never paste a real key into any file.</b> Put it here, in Settings. If a key ever leaks into a public repo, regenerate it on RapidAPI immediately.</div>
+      <p class="hint">Keys typed here are stored <b>only in this browser's localStorage</b>. They are sent only to RapidAPI when you press Fetch.</p>
+      <div class="warn"><b>⚠ Built-in key is public.</b> This app ships with a RapidAPI key built in (config.js), added by the owner so visitors can fetch without pasting one. Anyone can view it in the public repo, and every Fetch counts against the owner's quota. A key typed here overrides the built-in one. If the quota is abused, rotate the key on RapidAPI.</div>
 
       <div class="settings-grid">
         <div>
           <div class="field">
             <label for="apiKeyInput">RapidAPI key</label>
             <input type="password" id="apiKeyInput" placeholder="YOUR_RAPIDAPI_KEY" autocomplete="off">
-            <p class="note">One key works for every RapidAPI host below (same RapidAPI account). Show/hide with the button.</p>
+            <p class="note">One key works for every RapidAPI host below (same RapidAPI account). Show/hide with the button. Leave blank to use the built-in key.</p>
           </div>
           <div class="field">
             <label for="appsScriptInput">Google Apps Script web-app URL</label>
