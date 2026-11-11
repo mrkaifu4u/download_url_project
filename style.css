@@ -83,6 +83,7 @@ input, select, textarea { font-family: inherit; }
   font-size: 17px; width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
   display: grid; place-items: center; background: var(--bg-3); border: 1px solid var(--line); font-style: normal;
 }
+.nav-item .ico svg { width: 18px; height: 18px; display: block; fill: currentColor; }
 .nav-item .ico.ig { color: var(--pink); }
 .nav-item .ico.yt { color: var(--red-bright); }
 .nav-item .ico.fb { color: #60a5fa; font-weight: 900; }
@@ -358,6 +359,8 @@ input, select, textarea { font-family: inherit; }
   display: grid; place-items: center; font-size: 24px;
   background: var(--bg-3); border: 1px solid var(--line);
 }
+.qa-ico svg { width: 26px; height: 26px; display: block; fill: currentColor; }
+.chip svg { width: 14px; height: 14px; vertical-align: -2px; fill: currentColor; }
 .qa-card.ig .qa-ico { background: rgba(255, 46, 99, .14); border-color: rgba(255, 46, 99, .4); color: var(--pink); }
 .qa-card.yt .qa-ico { background: rgba(232, 17, 45, .14); border-color: rgba(232, 17, 45, .4); color: var(--red-bright); }
 .qa-card.fb .qa-ico { background: rgba(59, 130, 246, .14); border-color: rgba(59, 130, 246, .4); color: #60a5fa; font-weight: 900; }
