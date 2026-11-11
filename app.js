@@ -571,10 +571,14 @@
     else el.previewDuration.style.display = 'none';
 
     const first = r.formats[0];
-    // If the still thumbnail cannot be shown either, say so plainly
-    // instead of leaving an empty box — the Download button still works.
+    const mediaBox = el.previewVideo.parentElement; // .preview-media
+    if (mediaBox) mediaBox.style.display = ''; // restore after an earlier failed preview hid it
+    // If the still thumbnail cannot be shown either, hide the (otherwise
+    // empty black) media box and say so plainly instead — the Download
+    // button still works.
     const showThumbFallback = () => {
       el.previewImage.style.display = 'none';
+      if (mediaBox) mediaBox.style.display = 'none';
       el.downloadNote.textContent += ' Preview could not be shown in this browser — the Download button below still works.';
     };
     if (first) {
