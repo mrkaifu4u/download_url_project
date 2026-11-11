@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Downloader — Insta · YouTube · Facebook</title>
+<meta name="description" content="Paste a video URL, preview it, pick a quality and download. Instagram Reels & Stories, Facebook video, YouTube Shorts & full videos, and video-to-song.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="backdrop" id="backdrop"></div>
+<div class="app">
+
+  <!-- ================= Sidebar ================= -->
+  <aside class="sidebar" id="sidebar" aria-label="Tools">
+    <div class="brand">
+      <div class="brand-mark">▶</div>
+      <div>
+        <h1>Video<br><span>Downloader</span></h1>
+        <small>by Kaifoddin</small>
+      </div>
+    </div>
+
+    <button class="nav-item active" data-tool="dashboard"><span class="ico">▦</span> Dashboard</button>
+
+    <div class="nav-group">
+      <p>Instagram</p>
+      <button class="nav-item" data-tool="ig_reel"><span class="ico">🎬</span> Reel Download</button>
+      <button class="nav-item" data-tool="ig_story"><span class="ico">⏱</span> Story Download</button>
+      <button class="nav-item" data-tool="ig_dp"><span class="ico">👤</span> DP Download</button>
+      <button class="nav-item" data-tool="ig_caption"><span class="ico">📋</span> Copy Reel Caption</button>
+      <button class="nav-item" data-tool="ig_bio"><span class="ico">✍</span> Copy Bio</button>
+    </div>
+
+    <div class="nav-group">
+      <p>Facebook</p>
+      <button class="nav-item" data-tool="fb_video"><span class="ico">📘</span> Video Download</button>
+    </div>
+
+    <div class="nav-group">
+      <p>YouTube</p>
+      <button class="nav-item" data-tool="yt_short"><span class="ico">⚡</span> Short Download</button>
+      <button class="nav-item" data-tool="yt_full"><span class="ico">▶</span> Full Video Download</button>
+    </div>
+
+    <div class="nav-group">
+      <p>Converter</p>
+      <button class="nav-item" data-tool="to_song"><span class="ico">♪</span> Video to Song <span class="tag">MP3</span></button>
+    </div>
+
+    <div class="sidebar-foot">
+      <b>Free-plan quotas</b> are shown on the Dashboard.<br>
+      1 paste + Fetch = 1 API call.<br>
+      Your key never leaves this browser.
+    </div>
+  </aside>
+
+  <!-- ================= Main ================= -->
+  <main class="main">
+    <div class="topbar">
+      <button class="hamburger" id="hamburger" aria-label="Open menu">☰</button>
+      <div>
+        <h1 class="page-title" id="pageTitle">Dash<span>board</span></h1>
+        <p class="page-sub" id="pageSub">Paste a video link, preview it, pick a quality and download — straight to your PC or phone.</p>
+      </div>
+      <div class="spacer"></div>
+      <div class="pill-badge">This month · <b id="monthLabel">—</b></div>
+    </div>
+
+    <div class="wordmark" aria-hidden="true">DOWN<em>LOAD</em></div>
+
+    <!-- ===== Fetch card (shown for every tool except Dashboard-only view) ===== -->
+    <section class="card" id="fetchCard">
+      <h2><span class="dot">●</span> <span id="fetchTitle">Paste video URL</span></h2>
+      <p class="hint" id="fetchHint">Supports Instagram Reels, Facebook videos, YouTube Shorts &amp; full videos. The app auto-detects the platform from the link.</p>
+
+      <div class="url-row">
+        <input type="url" id="urlInput" placeholder="https://www.instagram.com/reels/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…" autocomplete="off" spellcheck="false">
+        <button class="btn" id="fetchBtn">Fetch video</button>
+      </div>
+
+      <div class="quick-row">
+        <span>Try:</span>
+        <button class="chip" data-sample="https://www.instagram.com/reels/DeEvB06NaqX/">IG Reel sample</button>
+        <button class="chip" id="demoBtn">▶ Demo preview (no key needed)</button>
+        <button class="chip" id="pasteBtn">📋 Paste from clipboard</button>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <!-- DP / Bio helper input -->
+      <div id="usernameRow" style="display:none; margin-top:14px;">
+        <div class="url-row">
+          <input type="text" id="usernameInput" placeholder="Instagram username — e.g. mrkaifu4u (without @)" autocomplete="off" spellcheck="false">
+          <button class="btn ghost" id="usernameBtn">Use username</button>
+        </div>
+        <p class="hint" style="margin-top:10px;">DP / Bio use the profile URL <code>instagram.com/&lt;username&gt;/</code> through the all-in-one API. If that API is not subscribed, the app will say so instead of failing silently.</p>
+      </div>
+    </section>
+
+    <!-- ===== Preview ===== -->
+    <section class="card preview" id="previewCard">
+      <h2><span class="dot">●</span> Preview</h2>
+      <p class="hint">Check the video on screen first, then pick a quality and download.</p>
+      <div class="preview-grid">
+        <div class="preview-media">
+          <video id="previewVideo" controls playsinline preload="metadata" poster=""></video>
+          <img id="previewImage" alt="Video thumbnail" style="display:none;">
+          <span class="dur" id="previewDuration" style="display:none;"></span>
+        </div>
+        <div class="preview-meta">
+          <h3 id="previewTitle">Untitled video</h3>
+          <p class="author" id="previewAuthor"></p>
+          <p class="caption" id="previewCaption" style="display:none;"></p>
+          <p class="quality-label">Choose quality</p>
+          <div class="qualities" id="qualityList"></div>
+          <div class="preview-actions">
+            <button class="btn" id="downloadBtn">⬇ Download</button>
+            <button class="btn ghost small" id="copyCaptionBtn">Copy caption</button>
+            <button class="btn ghost small" id="copyLinkBtn">Copy video link</button>
+          </div>
+          <div class="progress" id="progress">
+            <div class="bar"><i id="progressBar"></i></div>
+            <p id="progressText">Preparing download…</p>
+          </div>
+          <p class="hint" id="downloadNote" style="margin-top:12px;"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Quota ===== -->
+    <section class="card" id="quotaCard">
+      <h2><span class="dot">●</span> Free-plan usage — this month</h2>
+      <p class="hint">Every Fetch uses <b>1 API call</b>. Downloading the file itself costs nothing extra. Limits reset on the <b>1st of next month</b>. Edit limits in Settings below if your plan differs.</p>
+      <div class="quota-grid" id="quotaGrid"></div>
+    </section>
+
+    <!-- ===== History ===== -->
+    <section class="card">
+      <h2><span class="dot">●</span> Recent downloads</h2>
+      <p class="hint">Kept in this browser only. Every fetch is also logged to your Google Sheet when an Apps Script URL is set in Settings.</p>
+      <div class="history-list" id="historyList"></div>
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn ghost small" id="clearHistoryBtn">Clear history</button>
+        <button class="btn ghost small" id="exportHistoryBtn">Export history (CSV)</button>
+      </div>
+    </section>
+
+    <!-- ===== Settings ===== -->
+    <section class="card" id="settingsCard">
+      <h2><span class="dot">●</span> Settings</h2>
+      <p class="hint">Keys are stored <b>only in this browser's localStorage</b>. They are never sent to any server except RapidAPI when you press Fetch, and never committed to git.</p>
+      <div class="warn"><b>⚠ Never paste a real key into any file.</b> Put it here, in Settings. If a key ever leaks into a public repo, regenerate it on RapidAPI immediately.</div>
+
+      <div class="settings-grid">
+        <div>
+          <div class="field">
+            <label for="apiKeyInput">RapidAPI key</label>
+            <input type="password" id="apiKeyInput" placeholder="YOUR_RAPIDAPI_KEY" autocomplete="off">
+            <p class="note">One key works for every RapidAPI host below (same RapidAPI account). Show/hide with the button.</p>
+          </div>
+          <div class="field">
+            <label for="appsScriptInput">Google Apps Script web-app URL</label>
+            <input type="url" id="appsScriptInput" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+            <p class="note">From <code>apps-script/Code.gs</code> — deploy as Web App, Execute as Me, Anyone. Leave empty to keep history in this browser only.</p>
+          </div>
+        </div>
+        <div>
+          <div class="field">
+            <label>Monthly limits (free plan)</label>
+            <div class="limits-row">
+              <div class="field"><label for="limitIg">Instagram</label><input type="number" id="limitIg" min="0" step="1"></div>
+              <div class="field"><label for="limitYt">YouTube</label><input type="number" id="limitYt" min="0" step="1"></div>
+              <div class="field"><label for="limitFb">Facebook</label><input type="number" id="limitFb" min="0" step="1"></div>
+              <div class="field"><label for="limitAll">All-in-one</label><input type="number" id="limitAll" min="0" step="1"></div>
+            </div>
+            <p class="note">Defaults: Instagram 500, YouTube 500, Facebook 100, All-in-one 100 / month.</p>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn small" id="saveSettingsBtn">Save settings</button>
+            <button class="btn ghost small" id="toggleKeyBtn">Show key</button>
+            <button class="btn ghost small" id="testSheetBtn">Test Sheet connection</button>
+          </div>
+          <p class="hint" id="settingsMsg" style="margin-top:12px;"></p>
+        </div>
+      </div>
+    </section>
+
+    <p class="legal">
+      <b>Legal:</b> download only content you own or have the right to download, and only public content.
+      This app is not affiliated with Instagram, Facebook, YouTube or RapidAPI.
+      Respect creators — personal use only unless you have permission.
+    </p>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
