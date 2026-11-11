@@ -475,9 +475,13 @@
       setStatus('That link was not recognised. Paste an Instagram, Facebook or YouTube video link.', 'err');
       return;
     }
-    // Tool-specific routing: DP / Bio / Story go through the all-in-one API.
+    // Tool-specific routing: DP / Bio / Story go through the all-in-one API —
+    // but only when the link is actually a profile/story link. A reel link
+    // must use the Instagram API even if an earlier partial auto-detect
+    // left the wrong tool selected (typing "instagram.com/reel/…" used to
+    // lock the tool to DP Download and send the reel to the wrong API).
     const tool = currentTool;
-    if (tool === 'ig_dp' || tool === 'ig_bio' || tool === 'ig_story') detected = { platform: 'instagram', kind: tool === 'ig_story' ? 'story' : 'profile' };
+    if ((tool === 'ig_dp' || tool === 'ig_bio' || tool === 'ig_story') && detected.kind !== 'reel') detected = { platform: 'instagram', kind: tool === 'ig_story' ? 'story' : 'profile' };
     if (tool === 'fb_video') detected = { platform: 'facebook', kind: 'video' };
     if (tool === 'yt_short' || tool === 'yt_full') detected = { platform: 'youtube', kind: tool === 'yt_short' ? 'short' : 'video' };
 
@@ -808,7 +812,13 @@
     else setStatus('Nothing to copy yet — fetch a video first.', 'err');
   });
   el.usernameBtn.addEventListener('click', () => {
-    const u = el.usernameInput.value.trim().replace(/^@/, '');
+    // Accept a plain username ("mr.kaifu_4u"), "@mr.kaifu_4u", or a full
+    // profile link pasted in ("https://www.instagram.com/mr.kaifu_4u/").
+    // Never build instagram.com/https://… — strip any domain first.
+    let u = el.usernameInput.value.trim();
+    u = u.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+         .replace(/^(www\.)?instagram\.com\//i, '')
+         .replace(/^@/, '').split(/[?#]/)[0].replace(/\/+$/, '').split('/')[0];
     if (!u) { setStatus('Enter an Instagram username first.', 'err'); return; }
     el.urlInput.value = 'https://www.instagram.com/' + u + '/';
     handleFetch();
@@ -841,12 +851,33 @@
   });
 
   // Auto-detect platform as the user pastes, and switch the tool label.
+  // Only switch on a COMPLETE link: while a URL is still being typed,
+  // "instagram.com/" on its own looks like a profile link, so switching
+  // then would lock the tool to DP Download and send a reel to the wrong
+  // API. A half-typed path keyword ("/re", "/reel" with no ID yet) also
+  // waits. The tool may re-switch when the detected type changes, so a
+  // corrected paste is never stuck on the first guess.
+  function detectSwitchTarget(value) {
+    const raw = (value || '').trim().toLowerCase();
+    const u = raw.split(/[?#]/)[0];
+    if (/instagram\.com/.test(u)) {
+      if (/\/stories?\/[^/]+/.test(u)) return 'ig_story';
+      if (/\/(reel|reels|p|tv)\/[^/]+/.test(u)) return 'ig_reel';
+      const m = u.match(/instagram\.com\/([a-z0-9._]+)\/?$/);
+      if (m && !/^(r|re|ree|reel|reels|p|t|tv|s|st|sto|stor|stori|stories)$/.test(m[1])) return 'ig_dp';
+      return null;
+    }
+    if (/facebook\.com|fb\.watch/.test(u)) {
+      if (/\/(videos|reel)\/[^/]+/.test(u) || /fb\.watch\/[^/]+/.test(u) || /facebook\.com\/watch/.test(raw)) return 'fb_video';
+      return null;
+    }
+    if (/youtube\.com\/shorts\/[^/]+/.test(u) || /youtu\.be\/[^/]+/.test(u)) return 'yt_short';
+    if (/youtube\.com\/watch/.test(raw) || /youtube\.com\/embed\/[^/]+/.test(u) || /music\.youtube\.com\/watch/.test(raw)) return 'yt_full';
+    return null;
+  }
   el.urlInput.addEventListener('input', () => {
-    const d = detectPlatform(el.urlInput.value.trim());
-    if (!d.platform) return;
-    const map = { reel: 'ig_reel', story: 'ig_story', profile: 'ig_dp', short: 'yt_short', video: currentTool === 'fb_video' ? 'fb_video' : (d.platform === 'facebook' ? 'fb_video' : 'yt_full') };
-    if (d.platform === 'facebook') setTool('fb_video');
-    else if (map[d.kind] && currentTool === 'dashboard') setTool(map[d.kind]);
+    const t = detectSwitchTarget(el.urlInput.value);
+    if (t && t !== currentTool) setTool(t);
   });
 
   applyAppSettings();
