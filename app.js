@@ -204,7 +204,7 @@
     cv.width = w * dpr; cv.height = hgt * dpr; cv.style.height = hgt + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, hgt);
-    const padL = 34, padR = 16, padT = 12, padB = 26;
+    const padL = 34, padR = 48, padT = 12, padB = 26;
     const maxV = Math.max(1, ...data.map(x => x.count));
     const xAt = i => padL + (data.length === 1 ? (w - padL - padR) / 2 : i * (w - padL - padR) / (data.length - 1));
     const yAt = v => padT + (1 - v / maxV) * (hgt - padT - padB);
