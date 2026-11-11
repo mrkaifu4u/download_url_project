@@ -62,7 +62,7 @@ const DEFAULT_LIMITS = {
   instagram: 500,
   youtube: 500,
   facebook: 100,
-  allinone: 100
+  allinone: 200 // free Basic plan on RapidAPI: $0/mo, 200 req/mo, hard limit
 };
 
 /** localStorage keys used by the app. */

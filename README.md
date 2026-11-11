@@ -28,7 +28,7 @@ Archivo, square buttons) — same look as the portfolio.
 |---|---|---|---|
 | Instagram Downloader | `instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com` | Per your RapidAPI subscription — set the limit in Settings | **Verified working 2026-11-11:** `GET /fetch?url=` returns `{ ok, download_url, thumbnail_url, caption, width, height, items[] }`. Carousel/album = `items[]`. Usually a single 720p HD URL. |
 | YouTube Downloader 24 | `youtube-downloader24.p.rapidapi.com` | Basic free: **500 requests / month** | Check that API's own docs for its exact endpoint/params before subscribing — the app normalises whatever `formats` array it returns. |
-| Social Media Downloader API Pro (all-in-one) | `social-media-downloader-api-pro.p.rapidapi.com` | Per subscription (default shown: 100/month) | `POST /extract` with `{ "url": "…" }` → `{ title, thumbnail, duration, formats: [{ quality: "1080p"/"720p"/"480p"/"360p"/"audio", url, ext }] }`. Used for Facebook, Story/DP/Bio attempts and Video-to-Song. |
+| Social Media Downloader API Pro (all-in-one) | `social-media-downloader-api-pro.p.rapidapi.com` | Free Basic plan: **$0/mo, 200 requests/month, hard limit** (verified 2026-11-11) | `POST /extract` with `{ "url": "…" }` → `{ title, thumbnail, duration, formats: [{ quality: "1080p"/"720p"/"480p"/"360p"/"audio", url, ext }] }`. Used for Facebook, Story/DP/Bio attempts and Video-to-Song. |
 | YouTube FAST Downloader (fallback) | — | Free: **100 requests / month, 50 MB max file** | Swap in as the YouTube host in `config.js` if the main YT API does not fit. |
 
 How to pick: keep the Instagram API you already have for Reels, use
