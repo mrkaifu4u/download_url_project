@@ -46,6 +46,35 @@
   let audioFormatChoice = 'mp3';
   let audioQualityChoice = '192';
 
+  /* ---------- admin-managed app settings (set by admin.html) ----------
+     The admin panel saves to localStorage 'vd_app_settings' AND to the
+     Sheet (dl_settings). This app reads the local copy: maintenance mode,
+     disabled APIs, admin-set limits and app name. The public app has NO
+     login wall in v1 — these settings cannot block anonymous downloads
+     beyond disabling a host / showing a maintenance notice. */
+  function loadAppSettings() {
+    try { return JSON.parse(localStorage.getItem('vd_app_settings') || '{}'); } catch { return {}; }
+  }
+  let appSettings = loadAppSettings();
+  function isHostDisabled(bucket) {
+    const d = appSettings.disabledHosts || [];
+    return d.indexOf(bucket) !== -1;
+  }
+  function applyAppSettings() {
+    if (appSettings.appName) document.title = appSettings.appName + ' — Video Downloader';
+    if (appSettings.maintenance) {
+      const main = document.querySelector('.main');
+      if (main && !document.getElementById('maintBanner')) {
+        const b = document.createElement('div');
+        b.id = 'maintBanner'; b.className = 'status show err';
+        b.style.marginBottom = '18px';
+        b.textContent = 'Maintenance mode is on — downloads are paused. Please check back soon.';
+        main.insertBefore(b, main.firstChild);
+      }
+      if (el.fetchBtn) el.fetchBtn.disabled = true;
+    }
+  }
+
   /* ---------- settings (localStorage only) ---------- */
   function loadSettings() {
     try {
@@ -53,9 +82,9 @@
       return {
         rapidapiKey: s.rapidapiKey || DEFAULT_RAPIDAPI_KEY || '',
         appsScriptUrl: s.appsScriptUrl || '',
-        limits: Object.assign({}, DEFAULT_LIMITS, s.limits || {})
+        limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}, s.limits || {})
       };
-    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', appsScriptUrl: '', limits: Object.assign({}, DEFAULT_LIMITS) }; }
+    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', appsScriptUrl: '', limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}) }; }
   }
   function saveSettings(s) { localStorage.setItem(STORE.settings, JSON.stringify(s)); }
   let settings = loadSettings();
@@ -426,6 +455,10 @@
     if (tool === 'yt_short' || tool === 'yt_full') detected = { platform: 'youtube', kind: tool === 'yt_short' ? 'short' : 'video' };
 
     const bucket = bucketFor(detected.platform, tool);
+    if (isHostDisabled(bucket) || (detected.platform === 'facebook' && isHostDisabled('facebook'))) {
+      setStatus('This service is temporarily disabled by the admin. Please try another platform.', 'err');
+      return;
+    }
     if (quotaLeft(bucket) <= 0) {
       setStatus('Monthly limit reached for ' + bucket + ' (' + settings.limits[bucket] + '/month). It resets ' + nextResetDate() + ' — or raise the limit in Settings if you upgraded your plan.', 'err');
       return;
@@ -743,6 +776,7 @@
     else if (map[d.kind] && currentTool === 'dashboard') setTool(map[d.kind]);
   });
 
+  applyAppSettings();
   renderQuota();
   renderHistory();
   renderSettings();

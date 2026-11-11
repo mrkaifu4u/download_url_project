@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Video Downloader</title>
+<meta name="description" content="Admin panel for Video Downloader: users, APIs, accounts, usage, logs, database and settings.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="backdrop" id="backdrop"></div>
+
+<!-- ==================== LOGIN VIEW ==================== -->
+<div class="auth-wrap" id="view-login">
+  <div class="auth-card">
+    <div class="brand auth-brand">
+      <div class="brand-mark">▶</div>
+      <div>
+        <h1>Video<br><span>Downloader</span></h1>
+        <small>by Kaifoddin</small>
+      </div>
+    </div>
+    <p class="auth-badge">👑 Admin Panel</p>
+    <h2>Admin Login</h2>
+    <p class="auth-sub">Sign in to manage the application</p>
+
+    <div class="notice" id="backendNotice" style="display:none;"></div>
+    <div class="notice warn-note" id="sessionExpiredMsg" style="display:none;">Session expired — please log in again.</div>
+    <div class="status err" id="loginError" style="display:none;"></div>
+
+    <form id="loginForm" autocomplete="off">
+      <div class="field">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" placeholder="admin@example.com" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <div class="pw-row">
+          <input type="password" id="loginPassword" placeholder="Your admin password" autocomplete="current-password" required>
+          <button type="button" class="btn ghost small pw-toggle" data-toggle="loginPassword">Show</button>
+        </div>
+      </div>
+      <label class="check-row"><input type="checkbox" id="rememberMe"> Remember me</label>
+      <button type="submit" class="btn block" id="loginBtn">➜ Log In</button>
+    </form>
+
+    <div class="backend-box">
+      <h3>Admin backend</h3>
+      <p class="hint">The admin panel talks to the Apps Script web app. Paste its URL once and it is saved in this browser.</p>
+      <div class="field">
+        <label for="backendUrlInput">Apps Script web-app URL</label>
+        <input type="url" id="backendUrlInput" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+      </div>
+      <button type="button" class="btn ghost small" id="saveBackendBtn">Save backend URL</button>
+      <p class="hint" id="backendStatus">Backend not checked yet.</p>
+    </div>
+    <p class="auth-foot"><a href="index.html">← Back to App</a></p>
+  </div>
+</div>
+
+<!-- ==================== SETUP VIEW ==================== -->
+<div class="auth-wrap" id="view-setup" style="display:none;">
+  <div class="auth-card">
+    <div class="brand auth-brand">
+      <div class="brand-mark">▶</div>
+      <div>
+        <h1>Video<br><span>Downloader</span></h1>
+        <small>by Kaifoddin</small>
+      </div>
+    </div>
+    <p class="auth-badge">👑 Admin Panel</p>
+    <h2>Create first admin</h2>
+    <p class="auth-sub">No admin exists yet. Create the first admin account — this can only be done once, through the backend.</p>
+    <div class="status err" id="setupError" style="display:none;"></div>
+    <div class="status ok" id="setupOk" style="display:none;"></div>
+    <form id="setupForm" autocomplete="off">
+      <div class="field">
+        <label for="setupEmail">Email</label>
+        <input type="email" id="setupEmail" placeholder="admin@example.com" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="setupPassword">Password (min 8 characters)</label>
+        <div class="pw-row">
+          <input type="password" id="setupPassword" placeholder="Choose a strong password" autocomplete="new-password" minlength="8" required>
+          <button type="button" class="btn ghost small pw-toggle" data-toggle="setupPassword">Show</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="setupConfirm">Confirm password</label>
+        <input type="password" id="setupConfirm" placeholder="Repeat the password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <button type="submit" class="btn block" id="setupBtn">Create admin</button>
+    </form>
+    <p class="hint" id="setupBackendLine"></p>
+    <p class="auth-foot"><a href="index.html">← Back to App</a></p>
+  </div>
+</div>
+
+<!-- ==================== CHANGE PASSWORD VIEW ==================== -->
+<div class="auth-wrap" id="view-change" style="display:none;">
+  <div class="auth-card">
+    <div class="brand auth-brand">
+      <div class="brand-mark">▶</div>
+      <div>
+        <h1>Video<br><span>Downloader</span></h1>
+        <small>by Kaifoddin</small>
+      </div>
+    </div>
+    <p class="auth-badge">👑 Admin Panel</p>
+    <h2>Change your password</h2>
+    <p class="auth-sub">Your password must be changed before you can continue.</p>
+    <div class="status err" id="changeError" style="display:none;"></div>
+    <form id="changeForm" autocomplete="off">
+      <div class="field">
+        <label for="oldPassword">Current password</label>
+        <input type="password" id="oldPassword" autocomplete="current-password" required>
+      </div>
+      <div class="field">
+        <label for="newPassword">New password (min 8 characters)</label>
+        <input type="password" id="newPassword" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label for="newConfirm">Confirm new password</label>
+        <input type="password" id="newConfirm" autocomplete="new-password" minlength="8" required>
+      </div>
+      <button type="submit" class="btn block" id="changeBtn">Change password &amp; continue</button>
+    </form>
+    <p class="auth-foot"><button type="button" class="link-btn" id="changeLogoutBtn">Log out instead</button></p>
+  </div>
+</div>
+
+<!-- ==================== ADMIN APP VIEW ==================== -->
+<div class="app" id="view-app" style="display:none;">
+
+  <aside class="sidebar" id="adminSidebar" aria-label="Admin navigation">
+    <button class="drawer-close" id="drawerClose" aria-label="Close menu">✕</button>
+    <div class="brand">
+      <div class="brand-mark">▶</div>
+      <div>
+        <h1>Video<br><span>Downloader</span></h1>
+        <small>by Kaifoddin</small>
+      </div>
+    </div>
+    <p class="auth-badge sidebar-badge">👑 Admin Panel</p>
+
+    <nav class="nav-list" id="adminNav">
+      <button class="nav-item active" data-section="dashboard"><span class="ico">▦</span> Dashboard</button>
+      <button class="nav-item" data-section="users"><span class="ico">👥</span> Users &amp; Access</button>
+      <button class="nav-item" data-section="api"><span class="ico">&lt;/&gt;</span> API Management</button>
+      <button class="nav-item" data-section="accounts"><span class="ico">▤</span> Accounts</button>
+      <button class="nav-item" data-section="usage"><span class="ico">📊</span> Usage &amp; Reports</button>
+      <button class="nav-item" data-section="logs"><span class="ico">☰</span> Download Logs</button>
+      <button class="nav-item" data-section="database"><span class="ico">🗄</span> Database</button>
+      <button class="nav-item" data-section="settings"><span class="ico">⚙</span> App Settings</button>
+      <button class="nav-item" data-section="audit"><span class="ico">🛡</span> Audit Logs</button>
+      <a class="nav-item" href="index.html"><span class="ico">←</span> Back to App</a>
+      <button class="nav-item" id="navProfileBtn"><span class="ico">👤</span> Admin Profile</button>
+      <button class="nav-item" id="navLogoutBtn"><span class="ico">↪</span> Logout</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <b>Admin session:</b> 30-minute inactivity expiry.
+      Storage is Google Sheets — row counts only, no file sizes.
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <button class="hamburger" id="hamburger" aria-label="Open menu">☰</button>
+      <div class="page-head">
+        <h1 class="page-title" id="pageTitle">Admin <span>Dashboard</span></h1>
+        <p class="page-sub" id="pageSub">Manage users, APIs, accounts, usage, and all application settings from one place.</p>
+      </div>
+      <div class="spacer"></div>
+      <div class="admin-id" id="adminIdentity"><b>—</b><span>—</span></div>
+      <div class="pill-badge" id="sessionCountdown" title="Session expires after 30 minutes without activity">Session 30:00</div>
+      <button class="btn ghost small" id="topLogoutBtn">Logout</button>
+    </div>
+
+    <div class="warn" id="sessionWarn" style="display:none;">⚠ Your session expires in under 5 minutes. Click anywhere or make any change to stay signed in.</div>
+    <div class="status err" id="appError" style="display:none;"></div>
+
+    <!-- ============ DASHBOARD ============ -->
+    <section class="admin-section" id="section-dashboard">
+      <div class="stat-row admin-stats">
+        <div class="stat pink"><div class="stat-ico">👥</div><div><p>Total Users</p><strong id="statTotalUsers">0</strong></div></div>
+        <div class="stat teal"><div class="stat-ico">✓</div><div><p>Active Users</p><strong id="statActiveUsers">0</strong></div></div>
+        <div class="stat amber"><div class="stat-ico">⊘</div><div><p>Blocked Users</p><strong id="statBlockedUsers">0</strong></div></div>
+        <div class="stat purple"><div class="stat-ico">⬇</div><div><p>Total Downloads</p><strong id="statTotalDownloads">0</strong></div></div>
+        <div class="stat"><div class="stat-ico">🔗</div><div><p>API Accounts</p><strong id="statApiAccounts">0</strong></div></div>
+        <div class="stat"><div class="stat-ico">📅</div><div><p>Today's Downloads</p><strong id="statTodayDownloads">0</strong></div></div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="card">
+          <div class="card-head">
+            <h2><span class="dot">●</span> Download Trend</h2>
+            <select id="trendRange" aria-label="Trend range">
+              <option value="7" selected>Last 7 Days</option>
+              <option value="14">Last 14 Days</option>
+              <option value="30">Last 30 Days</option>
+            </select>
+          </div>
+          <p class="hint">Downloads per day, from the Google Sheet (backend data only).</p>
+          <canvas id="trendChart" height="220" aria-label="Downloads per day chart"></canvas>
+          <p class="empty" id="trendEmpty" style="display:none;">No downloads in this period yet — the chart will grow as downloads are logged.</p>
+        </div>
+
+        <div class="card">
+          <h2><span class="dot">●</span> Downloads by Platform</h2>
+          <p class="hint">Percentages are computed only from real totals.</p>
+          <div class="donut-wrap">
+            <canvas id="platformChart" width="180" height="180" aria-label="Downloads by platform chart"></canvas>
+            <div class="donut-centre"><strong id="platformTotal">0</strong><span>Total</span></div>
+          </div>
+          <div id="platformLegend"></div>
+          <p class="empty" id="platformEmpty" style="display:none;">No downloads yet — nothing to break down by platform.</p>
+        </div>
+
+        <div class="card">
+          <h2><span class="dot">●</span> System Overview</h2>
+          <ul class="sys-list">
+            <li><span>✓ App Status</span><b class="pill ok-pill">Running</b></li>
+            <li><span>✓ API Status</span><b id="sysApiStatus">Not tested</b></li>
+            <li><span>✓ Database</span><b id="sysDb">—</b></li>
+            <li><span>✓ Storage</span><b id="sysStorage">Google Sheets — 0 rows total</b></li>
+            <li><span>✓ Last Backup</span><b id="sysLastBackup">Never</b></li>
+          </ul>
+          <div id="sysDbTabs"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2><span class="dot">●</span> Recent Download Logs</h2>
+          <button class="btn ghost small" id="viewAllLogsBtn">View All Logs →</button>
+        </div>
+        <div class="filter-row">
+          <input type="search" id="recentSearch" placeholder="Search by URL, tool, user, or location…" aria-label="Search recent logs">
+          <select id="recentPlatform" aria-label="Filter by platform">
+            <option value="">All platforms</option>
+            <option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option>
+            <option value="facebook">Facebook</option>
+            <option value="allinone">Video to Audio</option>
+          </select>
+          <select id="recentDevice" aria-label="Filter by device">
+            <option value="">All devices</option>
+            <option value="Desktop">Desktop</option>
+            <option value="Mobile">Mobile</option>
+          </select>
+          <button class="btn ghost small" id="recentExportBtn">Export CSV</button>
+        </div>
+        <div class="table-wrap"><table class="history-table logs-table" id="recentLogsTable"></table></div>
+        <p class="empty" id="recentLogsEmpty" style="display:none;">No downloads logged yet.</p>
+        <div class="pager" id="recentPager"></div>
+      </div>
+
+      <div class="shortcut-grid">
+        <div class="card shortcut"><h3>👥 Users &amp; Access</h3><p>Create, update, block/unblock users and set passwords.</p><button class="btn ghost small" data-goto="users">Manage Users →</button></div>
+        <div class="card shortcut"><h3>&lt;/&gt; API Management</h3><p>Add, update, and rotate API keys (RapidAPI, YouTube, etc.).</p><button class="btn ghost small" data-goto="api">Manage APIs →</button></div>
+        <div class="card shortcut"><h3>▤ Accounts</h3><p>Maintain platform accounts (Instagram, YouTube, Facebook).</p><button class="btn ghost small" data-goto="accounts">Manage Accounts →</button></div>
+        <div class="card shortcut"><h3>🗄 Database</h3><p>View, search, and manage download logs and data.</p><button class="btn ghost small" data-goto="database">Open Database →</button></div>
+        <div class="card shortcut"><h3>⚙ App Settings</h3><p>Update app limits, plan usage, backup, and general settings.</p><button class="btn ghost small" data-goto="settings">Configure Settings →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ USERS & ACCESS ============ -->
+    <section class="admin-section" id="section-users" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> Users &amp; Access</h2>
+        <p class="hint">Registered app users from the backend. There are no registered app users yet unless the backend returns some — this list is never filled with invented users.</p>
+        <div class="filter-row">
+          <input type="search" id="userSearch" placeholder="Search by name or email…" aria-label="Search users">
+          <select id="userRoleFilter" aria-label="Filter by role">
+            <option value="">All roles</option>
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+          </select>
+          <select id="userStatusFilter" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="blocked">Blocked</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+        <div class="table-wrap"><table class="history-table" id="usersTable"></table></div>
+        <p class="empty" id="usersEmpty" style="display:none;">No users yet.</p>
+      </div>
+      <div class="card">
+        <h2><span class="dot">●</span> Create user</h2>
+        <p class="hint">New users are created through the backend. Existing passwords are never displayed.</p>
+        <div class="status err" id="userFormError" style="display:none;"></div>
+        <div class="status ok" id="userFormOk" style="display:none;"></div>
+        <form id="createUserForm" autocomplete="off">
+          <div class="form-grid">
+            <div class="field"><label for="newUserName">Name</label><input type="text" id="newUserName" required></div>
+            <div class="field"><label for="newUserEmail">Email</label><input type="email" id="newUserEmail" required></div>
+            <div class="field"><label for="newUserRole">Role</label><select id="newUserRole"><option value="user">User</option><option value="admin">Admin</option></select></div>
+            <div class="field"><label for="newUserPassword">Password (min 8 characters)</label><input type="password" id="newUserPassword" minlength="8" required></div>
+          </div>
+          <button type="submit" class="btn small">Create user</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ API MANAGEMENT ============ -->
+    <section class="admin-section" id="section-api" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> API Management</h2>
+        <p class="hint">One row per real RapidAPI host from the app config. Usage is counted from this browser's quota records plus backend totals; 0 when there is none.</p>
+        <div class="warn"><b>⚠ Built-in key is public.</b> This app ships with a RapidAPI key built in (config.js), added by the owner so visitors can fetch without pasting one. Anyone can view it in the public repo, and every Fetch counts against the owner's quota. Rotate the key on RapidAPI if it is abused.</div>
+        <div id="apiRows"></div>
+        <p class="hint">Failed requests: <b id="apiFailedCount">0</b> — failed fetches are not stored in v1, so this is 0 unless the backend reports some.</p>
+        <div class="status ok" id="apiMsg" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- ============ ACCOUNTS ============ -->
+    <section class="admin-section" id="section-accounts" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> Accounts</h2>
+        <p class="hint">Platform accounts. Downloads use RapidAPI and do not need a platform login — an account here is only a record for the admin.</p>
+        <div id="accountsRows"></div>
+        <p class="empty" id="accountsEmpty" style="display:none;">No account rows — all rows were removed. <button class="btn ghost small" id="restoreAccountsBtn">Restore default rows</button></p>
+        <div class="status ok" id="accountsMsg" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- ============ USAGE & REPORTS ============ -->
+    <section class="admin-section" id="section-usage" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> Usage &amp; Reports</h2>
+        <p class="hint">All figures come from backend stats and logs. Failed downloads: <b id="usageFailed">0</b> — failed fetches are not stored in v1.</p>
+        <div class="filter-row">
+          <div class="field"><label for="usageFrom">From</label><input type="date" id="usageFrom"></div>
+          <div class="field"><label for="usageTo">To</label><input type="date" id="usageTo"></div>
+          <button class="btn ghost small" id="usageApplyBtn">Apply dates</button>
+          <button class="btn ghost small" id="usageExportBtn">Export report (CSV)</button>
+        </div>
+        <div class="stat-row admin-stats">
+          <div class="stat"><div class="stat-ico">📅</div><div><p>Today</p><strong id="usageToday">0</strong></div></div>
+          <div class="stat"><div class="stat-ico">📆</div><div><p>This week</p><strong id="usageWeek">0</strong></div></div>
+          <div class="stat"><div class="stat-ico">🗓</div><div><p>This month</p><strong id="usageMonth">0</strong></div></div>
+          <div class="stat"><div class="stat-ico">⬇</div><div><p>Total</p><strong id="usageTotal">0</strong></div></div>
+        </div>
+        <div class="report-grid">
+          <div><h3>Platform-wise</h3><div id="usagePlatform"></div></div>
+          <div><h3>Tool-wise</h3><div id="usageTools"></div></div>
+          <div><h3>API consumption &amp; remaining quota</h3><div id="usageQuota"></div></div>
+          <div><h3>Most-used tools</h3><div id="usageTopTools"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DOWNLOAD LOGS ============ -->
+    <section class="admin-section" id="section-logs" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> Download Logs</h2>
+        <p class="hint">Every logged download from the Google Sheet. Click a row to expand its details.</p>
+        <div class="filter-row">
+          <input type="search" id="logsSearch" placeholder="Search by user, URL, platform, or date…" aria-label="Search logs">
+          <select id="logsPlatform" aria-label="Filter by platform">
+            <option value="">All platforms</option>
+            <option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option>
+            <option value="facebook">Facebook</option>
+            <option value="allinone">Video to Audio</option>
+          </select>
+          <select id="logsDevice" aria-label="Filter by device">
+            <option value="">All devices</option>
+            <option value="Desktop">Desktop</option>
+            <option value="Mobile">Mobile</option>
+          </select>
+          <select id="logsTool" aria-label="Filter by tool">
+            <option value="">All tools</option>
+            <option value="ig_reel">Reel Download</option>
+            <option value="ig_story">Story Download</option>
+            <option value="ig_dp">DP Download</option>
+            <option value="ig_caption">Copy Reel Caption</option>
+            <option value="ig_bio">Copy Bio</option>
+            <option value="fb_video">Facebook Video</option>
+            <option value="yt_short">Short Download</option>
+            <option value="yt_full">Full Video Download</option>
+            <option value="to_song">Video to Audio</option>
+          </select>
+          <input type="date" id="logsFrom" aria-label="From date">
+          <input type="date" id="logsTo" aria-label="To date">
+          <button class="btn ghost small" id="logsExportBtn">Export CSV</button>
+        </div>
+        <div class="table-wrap"><table class="history-table logs-table" id="logsTable"></table></div>
+        <p class="empty" id="logsEmpty" style="display:none;">No downloads logged yet.</p>
+        <div class="pager" id="logsPager"></div>
+      </div>
+    </section>
+
+    <!-- ============ DATABASE ============ -->
+    <section class="admin-section" id="section-database" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> Database</h2>
+        <p class="hint">Google Sheets tabs. Storage is Google Sheets — row counts only, never GB figures. There is no SQL in this app.</p>
+        <p class="hint" id="dbHealth">Database health: checking…</p>
+        <div id="dbTabs"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2><span class="dot">●</span> <span id="dbViewerTitle">Select a tab</span></h2>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn ghost small" id="dbExportBtn" disabled>Export this tab (CSV)</button>
+            <button class="btn ghost small" id="dbBackupBtn">Backup (JSON snapshot)</button>
+            <button class="btn ghost small" id="dbRestoreBtn" disabled title="Restore is not available in v1">Restore is not available in v1 — restore by re-importing the CSV in the Sheet</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <input type="search" id="dbSearch" placeholder="Search rows in this tab…" aria-label="Search tab rows">
+        </div>
+        <div class="table-wrap"><table class="history-table" id="dbViewerTable"></table></div>
+        <p class="empty" id="dbViewerEmpty">Select a tab above to view its rows (first 100 shown).</p>
+        <h3 style="margin-top:18px;">Backup history</h3>
+        <div id="backupHistory"><p class="empty">No backups yet.</p></div>
+      </div>
+    </section>
+
+    <!-- ============ APP SETTINGS ============ -->
+    <section class="admin-section" id="section-settings" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> App Settings</h2>
+        <p class="hint">Saved to the backend and to this browser (so the public app can read the limits). The public app has no login wall in v1 — user management here does not block anonymous downloads.</p>
+        <div class="status err" id="settingsError" style="display:none;"></div>
+        <div class="status ok" id="settingsOk" style="display:none;"></div>
+        <form id="appSettingsForm" autocomplete="off">
+          <div class="field"><label for="setAppName">App name</label><input type="text" id="setAppName"></div>
+          <div class="field"><label>Monthly limits (per platform)</label>
+            <div class="limits-row">
+              <div class="field"><label for="setLimitIg">Instagram</label><input type="number" id="setLimitIg" min="0" step="1"></div>
+              <div class="field"><label for="setLimitYt">YouTube</label><input type="number" id="setLimitYt" min="0" step="1"></div>
+              <div class="field"><label for="setLimitFb">Facebook</label><input type="number" id="setLimitFb" min="0" step="1"></div>
+              <div class="field"><label for="setLimitAll">Video-to-Audio</label><input type="number" id="setLimitAll" min="0" step="1"></div>
+            </div>
+          </div>
+          <label class="check-row"><input type="checkbox" id="setMaintenance"> Maintenance mode (public app shows it is under maintenance)</label>
+          <div class="field" style="margin-top:14px;"><label>Backup</label>
+            <p class="note">Backups are JSON snapshots downloaded from the Database section. Last backup: <b id="setLastBackup">Never</b></p>
+          </div>
+          <button type="submit" class="btn small">Save settings</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ AUDIT LOGS ============ -->
+    <section class="admin-section" id="section-audit" style="display:none;">
+      <div class="card">
+        <h2><span class="dot">●</span> Audit Logs</h2>
+        <p class="hint">Admin actions recorded by the backend.</p>
+        <div class="table-wrap"><table class="history-table" id="auditTable"></table></div>
+        <p class="empty" id="auditEmpty" style="display:none;">No audit entries yet.</p>
+        <div class="pager" id="auditPager"></div>
+      </div>
+    </section>
+
+    <p class="legal"><b>Admin:</b> this panel manages the Video Downloader app. Download only content you own or have the right to download, and only public content.</p>
+  </main>
+</div>
+
+<!-- ==================== MODAL ==================== -->
+<div class="modal-backdrop" id="modalBackdrop" style="display:none;">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="modalTitle">Edit</h3>
+    <div id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="btn ghost small" id="modalCancel">Cancel</button>
+      <button class="btn small" id="modalSave">Save</button>
+    </div>
+    <div class="status err" id="modalError" style="display:none;"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

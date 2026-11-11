@@ -55,8 +55,12 @@ Story / DP / converter. All three share one RapidAPI key.
 3. Optional: adjust the monthly limits to match your plan, add your
    Apps Script URL, Save.
 
-> ⚠ Never put a real key in any file. `.env.example` shows the shape only.
-> If a key ever leaks into a public repo, regenerate it on RapidAPI.
+> ⚠ The app ships with a RapidAPI key built into `config.js` — added by
+> the owner on 2026-11-11 so visitors can fetch without pasting one.
+> The repo is public, so anyone can view that key and every visitor's
+> Fetch counts against the owner's quota. A key typed in Settings
+> overrides the built-in one. If the quota is abused, rotate the key
+> on RapidAPI and update `config.js`.
 
 ### 2. Connect Google Sheets (optional)
 
@@ -126,13 +130,70 @@ Download only content you own or have the right to download, and only
 public content. Personal use only unless you have permission. This app is
 not affiliated with Instagram, Facebook, YouTube or RapidAPI.
 
+## Admin Panel (`admin.html`)
+
+A separate admin interface — **not linked from the user app** (no admin
+link in `index.html`; open it directly at `…/admin.html`). Normal users
+never see admin pages, API details, database info or other users.
+
+### Setup
+
+1. Deploy `apps-script/Code.gs` as a Web App (same steps as §2 above —
+   the same script is both the download logger and the admin backend).
+2. Open `admin.html`. If no admin exists yet you get the **Create first
+   admin** setup screen: enter an email and a password (min 8 chars).
+   There is **no default password anywhere** — the setup screen is the
+   only way to create the first admin.
+3. Log in with that email/password. On first login you are **forced to
+   change the password**. Sessions last 30 minutes of inactivity, with a
+   countdown in the top bar; "Remember me" is the only way a session is
+   kept in `localStorage` (otherwise it lives in `sessionStorage`).
+4. If the backend URL is missing or unreachable, the login screen says
+   so and **refuses login** — there is no offline login.
+
+### What the admin can do
+
+Dashboard (real stats only — 0 / empty when there is nothing), Users &
+Access (create/edit/block/delete, passwords are hashed server-side and
+never displayed), API Management (hosts from `config.js`, masked keys,
+real Test button — each test uses 1 API call, enable/disable per API),
+Accounts (Instagram/YouTube/Facebook — honestly "Not connected", since
+downloads use RapidAPI with no account login), Usage & Reports, Download
+Logs (the exact 12 `downloader_data` columns, search/filters/pagination/
+CSV export, Google Maps links from saved coordinates only), Database
+(Sheet tabs with row counts, record search, CSV export, JSON backup;
+**Restore is not in v1** — restore by re-importing the CSV in the
+Sheet; no SQL execution from the browser, ever), App Settings (app name,
+monthly limits, maintenance mode, backup settings), Audit Logs (every
+admin action, with date/time/admin/action/result).
+
+### Security limits — read before relying on this
+
+- Passwords are stored as **SHA-256 + per-account salt** in the Sheet
+  (`dl_admin`); session tokens are stored only as hashes in
+  `dl_sessions` with a 30-minute sliding expiry. The backend rejects
+  every unauthenticated call.
+- **But:** this is a static site + Apps Script, not enterprise auth.
+  `admin.html` is unlinked but its URL is guessable, and GitHub Pages
+  has no server-side route protection — the backend is the only gate.
+  There is no brute-force lockout beyond the Sheet. For stronger
+  guarantees, a dedicated backend is needed.
+- **The public app has no login wall in v1.** User management in the
+  admin is a real list, but it cannot block anonymous downloads —
+  enforcing a login gate on the public app is a separate decision.
+- Maintenance mode (App Settings) shows a notice in `index.html` and
+  disables Fetch; disabling an API in API Management blocks Fetches
+  for that host in `index.html`. Both are read from `localStorage`
+  (`vd_app_settings`), which the admin page also saves to the Sheet.
+
 ## Files
 
 | File | What it is |
 |---|---|
 | `index.html` | Dashboard, sidebar, preview, quota, history, settings |
 | `style.css` | All styling + animations + mobile responsive |
-| `config.js` | API hosts, default limits, tool list — **no keys** |
-| `app.js` | Fetch/preview/download, quota, history, Sheets logging, GPS |
-| `apps-script/Code.gs` | Sheets logger (`downloader_data` tab) |
+| `config.js` | API hosts, default limits, tool list — **built-in RapidAPI key** (owner's choice, public repo — see warning above) |
+| `app.js` | Fetch/preview/download, quota, history, Sheets logging, GPS; reads admin settings (`vd_app_settings`) for maintenance mode, disabled hosts, limits |
+| `admin.html` / `admin.css` / `admin.js` | Admin login + dashboard (users, APIs, accounts, usage, logs, database, settings, audit) — separate page, not linked from `index.html` |
+| `apps-script/Code.gs` | Sheets logger (`downloader_data` tab) + admin backend (login, users, stats, logs, settings, audit, backup) |
 | `.env.example` / `.gitignore` | Key shape only; keep real keys out of git |
