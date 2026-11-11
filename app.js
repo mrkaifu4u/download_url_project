@@ -571,16 +571,35 @@
     else el.previewDuration.style.display = 'none';
 
     const first = r.formats[0];
+    // If the still thumbnail cannot be shown either, say so plainly
+    // instead of leaving an empty box — the Download button still works.
+    const showThumbFallback = () => {
+      el.previewImage.style.display = 'none';
+      el.downloadNote.textContent += ' Preview could not be shown in this browser — the Download button below still works.';
+    };
     if (first) {
       el.previewVideo.style.display = 'block';
       el.previewImage.style.display = 'none';
       el.previewVideo.poster = r.thumbnail || '';
       el.previewVideo.src = first.url;
       el.previewVideo.load();
+      // Instagram's CDN video sometimes will not play inline in a
+      // browser even though the same file downloads fine. If the
+      // player errors, fall back to the still thumbnail instead of a
+      // black box — the Download button still saves the real file.
+      el.previewVideo.onerror = () => {
+        if (r.thumbnail) {
+          el.previewVideo.style.display = 'none';
+          el.previewImage.style.display = 'block';
+          el.previewImage.src = r.thumbnail;
+          el.previewImage.onerror = showThumbFallback;
+        } else showThumbFallback();
+      };
     } else if (r.thumbnail) {
       el.previewVideo.style.display = 'none';
       el.previewImage.style.display = 'block';
       el.previewImage.src = r.thumbnail;
+      el.previewImage.onerror = showThumbFallback;
     }
     el.downloadNote.textContent = r.isAudio
       ? (r.wavFallback ? 'WAV is not returned by the API — saved as MP3 instead. ' : '') +
