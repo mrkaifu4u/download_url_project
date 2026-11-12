@@ -41,7 +41,13 @@
     appsScriptInput: $('appsScriptInput'), settingsMsg: $('settingsMsg'),
     quickActions: $('quickActions'), qualitySelect: $('qualitySelect'), qualityRow: $('qualityRow'),
     convertProgress: $('convertProgress'), convertBar: $('convertBar'), convertText: $('convertText'),
-    fetchCard: $('fetchCard')
+    fetchCard: $('fetchCard'),
+    bellBtn: $('bellBtn'), bellBadge: $('bellBadge'), notifWrap: $('notifWrap'),
+    notifPanel: $('notifPanel'), notifList: $('notifList'), notifEmpty: $('notifEmpty'),
+    notifCount: $('notifCount'), notifActions: $('notifActions'),
+    markAllReadBtn: $('markAllReadBtn'), clearAllBtn: $('clearAllBtn'),
+    notifConfirm: $('notifConfirm'), confirmClearBtn: $('confirmClearBtn'),
+    cancelClearBtn: $('cancelClearBtn'), notifCloseBtn: $('notifCloseBtn')
   };
 
   let currentTool = 'dashboard';
@@ -120,25 +126,37 @@
   }
   function quotaLeft(bucket) { return Math.max(0, (settings.limits[bucket] || 0) - getUsed(bucket)); }
 
+  /* ---------- monthly usage: 4 simple cards, no provider names ----------
+     Facebook downloads count against the shared 'allinone' allowance
+     (bucketFor routes Facebook there), so the Facebook card shows that
+     allowance (200). The unused 'facebook' bucket (100) is never
+     enforced, so it is not shown — nothing is double-counted. */
+  const USAGE_CARDS = [
+    { bucket: 'instagram', label: 'Instagram', unit: 'downloads', iconPage: 'instagram' },
+    { bucket: 'youtube', label: 'YouTube', unit: 'downloads', iconPage: 'youtube' },
+    { bucket: 'allinone', label: 'Facebook', unit: 'downloads', iconPage: 'facebook' },
+    { bucket: 'ig_profile', label: 'Profile Tools', unit: 'uses', iconPage: null }
+  ];
+  function brandIconHtml(page) {
+    // Reuse the real brand logo already in the sidebar — no second copy
+    // of the (large) image data needed.
+    const s = document.querySelector('.nav-item[data-page="' + page + '"] .ico');
+    return s ? s.innerHTML : '▶';
+  }
   function renderQuota() {
-    const rows = [
-      { bucket: 'instagram', label: 'Instagram', host: API_HOSTS.instagram },
-      { bucket: 'youtube',   label: 'YouTube',   host: API_HOSTS.youtube },
-      { bucket: 'facebook',  label: 'Facebook',  host: 'via All-in-one API' },
-      { bucket: 'allinone',  label: 'All-in-one', host: API_HOSTS.allinone },
-      { bucket: 'ig_profile', label: 'IG Profile (DP/Bio)', host: API_HOSTS.scrappa + ' (Scrappa, free 500/mo)' }
-    ];
     el.monthLabel.textContent = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-    el.quotaGrid.innerHTML = rows.map(r => {
+    el.quotaGrid.innerHTML = USAGE_CARDS.map(r => {
       const used = getUsed(r.bucket), limit = settings.limits[r.bucket] || 0;
       const left = Math.max(0, limit - used);
       const pct = limit ? Math.min(100, Math.round(used / limit * 100)) : 0;
       const cls = left === 0 ? 'out' : left <= Math.max(5, limit * 0.1) ? 'low' : '';
+      const icon = r.iconPage
+        ? '<span class="q-icon">' + brandIconHtml(r.iconPage) + '</span>'
+        : '<span class="q-icon">👤</span>';
       return '<div class="quota ' + cls + '">' +
-        '<div class="q-head"><b>' + r.label + '</b><span>' + used + ' / ' + limit + ' used</span></div>' +
-        '<div class="q-num">' + left + ' <small>left</small></div>' +
+        '<div class="q-head">' + icon + '<b>' + r.label + '</b><span>' + used + ' / ' + limit + ' ' + r.unit + ' used</span></div>' +
+        '<div class="q-num">' + left + ' <small>' + r.unit + ' remaining</small></div>' +
         '<div class="q-bar"><i style="width:' + pct + '%"></i></div>' +
-        '<p>' + r.host + '</p>' +
         '<p class="reset">Resets <b>' + nextResetDate() + '</b></p></div>';
     }).join('');
     renderStats();
@@ -159,8 +177,9 @@
     const totalDownloads = h.length;                 // every logged fetch, all time
     const urlsProcessed = sumQuotaAll();             // every Fetch = 1 URL processed
     const thisMonth = sumQuotaMonth(new Date());     // quota used this month
-    const totalLimit = Object.values(settings.limits).reduce((s, n) => s + (Number(n) || 0), 0);
-    const available = Math.max(0, totalLimit - thisMonth);
+    // Available downloads = what is left on the four usage cards only
+    // (the unused 'facebook' bucket is not counted — no double-counting).
+    const available = USAGE_CARDS.reduce((s, c) => s + quotaLeft(c.bucket), 0);
     if (el.statTotal) el.statTotal.textContent = totalDownloads.toLocaleString('en-US');
     if (el.statUrls) el.statUrls.textContent = urlsProcessed.toLocaleString('en-US');
     if (el.statMonth) el.statMonth.textContent = thisMonth.toLocaleString('en-US');
@@ -250,22 +269,27 @@
     });
   }
 
+  /* ---------- friendly names (history shows these, never tool codes) ---------- */
+  const TOOL_LABELS = { ig_reel: 'Reel Download', ig_story: 'Story Download', ig_dp: 'DP Download', ig_caption: 'Copy Reel Caption', ig_bio: 'Copy Bio', yt_short: 'Short Download', yt_full: 'Full Video Download', fb_video: 'Facebook Video Download', to_song: 'Video to Audio', dashboard: 'Dashboard' };
+  const PLATFORM_LABELS = { instagram: 'Instagram', youtube: 'YouTube', facebook: 'Facebook', allinone: 'Audio', local: 'My File' };
+  const BUCKET_LABELS = { instagram: 'Instagram', youtube: 'YouTube', allinone: 'Facebook', ig_profile: 'Profile Tools', facebook: 'Facebook' };
+
   /* ---------- history (localStorage) ---------- */
   function loadHistory() {
     try { return JSON.parse(localStorage.getItem(STORE.history) || '[]'); } catch { return []; }
   }
   function renderHistory() {
     const h = loadHistory();
-    if (!h.length) { el.historyList.innerHTML = '<p class="empty">No downloads yet — pick a tool from Quick Actions and fetch a video.</p>'; if (el.viewAllBtn) el.viewAllBtn.style.display = 'none'; return; }
+    if (!h.length) { el.historyList.innerHTML = '<p class="empty">No downloads yet — pick a tool from Quick Actions and download a video.</p>'; if (el.viewAllBtn) el.viewAllBtn.style.display = 'none'; return; }
     if (el.viewAllBtn) { el.viewAllBtn.style.display = ''; el.viewAllBtn.textContent = showAllHistory ? 'Show less ↑' : 'View All →'; }
     const shown = showAllHistory ? h.slice(0, 100) : h.slice(0, 6);
     const platIcon = { instagram: '◉', youtube: '▶', facebook: 'f', allinone: '♪' };
     el.historyList.innerHTML = '<table class="history-table"><thead><tr><th>#</th><th>Platform</th><th>Video Title</th><th>Format</th><th>Downloaded On</th><th></th></tr></thead><tbody>' +
       shown.map((item, i) =>
         '<tr><td data-label="#">' + (i + 1) + '</td>' +
-        '<td data-label="Platform"><span class="plat"><i>' + (platIcon[item.platform] || '▶') + '</i>' + escapeHtml(item.platform) + '</span></td>' +
+        '<td data-label="Platform"><span class="plat"><i>' + (platIcon[item.platform] || '▶') + '</i>' + escapeHtml(PLATFORM_LABELS[item.platform] || item.platform) + '</span></td>' +
         '<td data-label="Video Title"><div class="h-title">' + escapeHtml(item.video_url) + '</div>' +
-        '<div class="h-sub">' + escapeHtml(item.tool || '') + ' · ' + escapeHtml(item.city || 'unknown location') + '</div></td>' +
+        '<div class="h-sub">' + escapeHtml(TOOL_LABELS[item.tool] || item.tool || '') + ' · ' + escapeHtml(item.city || 'unknown location') + '</div></td>' +
         '<td data-label="Format"><span class="fmt-pill">' + escapeHtml(item.format || item.quality || '—') + '</span></td>' +
         '<td data-label="Downloaded On">' + escapeHtml(item.date + ' ' + item.time) + '</td>' +
         '<td data-label="" class="h-action"><button class="icon-btn" data-copy-url="' + escapeHtml(item.video_url) + '" title="Copy video link">⧉</button></td></tr>'
@@ -332,8 +356,12 @@
     localStorage.setItem(STORE.history, JSON.stringify(h.slice(0, 200)));
     renderHistory();
     // 2) If an Apps Script URL is set, POST the same row there.
+    //    Silent on screen: logging is a background job — it must never
+    //    overwrite the "Your video is ready" message, and the user
+    //    never needs to know about sheets or script URLs. Details stay
+    //    in the console for debugging.
     if (!settings.appsScriptUrl) {
-      setStatus('Saved to local history. (Sheet logging needs the Apps Script URL saved in this browser.)', 'info');
+      console.info('[downloader] Sheet logging skipped — no Apps Script URL saved in this browser.');
       return;
     }
     try {
@@ -342,9 +370,9 @@
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(entry)
       });
-      setStatus('Logged to Google Sheet ✓ (tab: downloader_data).', 'ok');
+      console.info('[downloader] Logged to Google Sheet (downloader_data).');
     } catch (e) {
-      setStatus('Saved locally, but the Sheet log failed — check the saved Apps Script URL.', 'err');
+      console.warn('[downloader] Sheet log failed:', e);
     }
   }
 
@@ -354,6 +382,180 @@
     el.status.innerHTML = msg;
   }
   function clearStatus() { el.status.className = 'status'; el.status.innerHTML = ''; }
+
+  /* ---------- user-friendly errors ----------
+     The user app NEVER shows technical detail: no API names, hosts,
+     HTTP codes or provider names. Errors thrown by the fetch helpers
+     keep their technical message internally (console.warn) and are
+     mapped here to a plain message before anything reaches the screen. */
+  function friendlyError(e) {
+    const raw = String((e && e.message) || e || '');
+    if (/No profile picture found/.test(raw)) return 'We couldn\'t find a profile picture for this profile.';
+    if (/This profile has no bio/.test(raw)) return 'This profile has no bio.';
+    if (/No profile found/.test(raw)) return 'We couldn\'t find that profile. Please check the name and try again.';
+    if (/YouTube and Facebook audio isn\'t available/.test(raw)) return raw; // already friendly
+    if (/No video file was returned/.test(raw)) return 'We couldn\'t get this video. Please try a different link.';
+    if (/Couldn\'t get this video right now|Could not download this Reel/.test(raw)) return 'We couldn\'t get this video right now. Please try again in a moment.';
+    if (/No downloadable formats/.test(raw)) return 'We couldn\'t get this video. Please try a different link.';
+    if (/Scrappa/i.test(raw)) return 'Profile lookup is temporarily unavailable. Please try again later.';
+    if (/HTTP|API|RapidAPI|server|network|Failed to fetch/i.test(raw)) return 'This service is temporarily unavailable. Please try again later.';
+    return raw || 'Something went wrong. Please try again.';
+  }
+  function isServiceError(e) {
+    return /HTTP|API|RapidAPI|Scrappa|server|network|Failed to fetch/i.test(String((e && e.message) || e || ''));
+  }
+
+  /* ---------- notifications ----------
+     Stored in localStorage (STORE.notifications), newest first, capped
+     at 100. The app has NO login, so notifications live per browser:
+     each browser gets an anonymous ID (STORE.userId) and every
+     notification is tagged with it, so the records stay separate if
+     accounts are ever added. Nothing here is fake — a notification is
+     only created by a real event (download, conversion, limit, failure). */
+  function localUserId() {
+    let id = null;
+    try { id = localStorage.getItem(STORE.userId); } catch { /* private mode */ }
+    if (!id) {
+      id = 'user_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      try { localStorage.setItem(STORE.userId, id); } catch { /* ignore */ }
+    }
+    return id;
+  }
+  const MY_USER_ID = localUserId();
+  const NOTIF_ICON = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+  function loadNotifications() {
+    try {
+      const all = JSON.parse(localStorage.getItem(STORE.notifications) || '[]');
+      return Array.isArray(all) ? all.filter(n => !n.userId || n.userId === MY_USER_ID) : [];
+    } catch { return []; }
+  }
+  function saveNotifications(list) {
+    try { localStorage.setItem(STORE.notifications, JSON.stringify(list.slice(0, 100))); } catch { /* ignore */ }
+  }
+  function loadNotifFlags() {
+    try { return JSON.parse(localStorage.getItem(STORE.notifFlags) || '{}'); } catch { return {}; }
+  }
+  function saveNotifFlags(f) {
+    try { localStorage.setItem(STORE.notifFlags, JSON.stringify(f)); } catch { /* ignore */ }
+  }
+  function addNotification(type, title, message) {
+    const list = loadNotifications();
+    const now = Date.now();
+    // Same unread notification in the last 10 minutes = the same event:
+    // do not stack duplicates.
+    if (list.some(n => !n.read && n.type === type && n.title === title && n.message === message && (now - n.time) < 10 * 60 * 1000)) return;
+    list.unshift({ id: 'n' + now.toString(36) + Math.random().toString(36).slice(2, 7), type, title, message, time: now, read: false, userId: MY_USER_ID });
+    saveNotifications(list);
+    renderNotifications();
+  }
+  function fmtNotifTime(t) {
+    return new Date(t).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+  function renderNotifications() {
+    const list = loadNotifications();
+    const unread = list.filter(n => !n.read).length;
+    if (el.bellBadge) {
+      el.bellBadge.style.display = unread ? '' : 'none';
+      el.bellBadge.textContent = unread > 99 ? '99+' : String(unread);
+    }
+    if (el.notifCount) el.notifCount.textContent = unread ? unread + ' unread' : (list.length ? list.length + ' total' : '');
+    if (el.notifList) {
+      el.notifList.innerHTML = list.map(n =>
+        '<div class="notif-item ' + (n.read ? 'read' : 'unread') + '" data-notif-id="' + escapeHtml(n.id) + '" role="button" tabindex="0" title="Tap to mark as read">' +
+        '<span class="notif-ico ' + n.type + '">' + (NOTIF_ICON[n.type] || 'ℹ') + '</span>' +
+        '<div class="notif-body"><b>' + escapeHtml(n.title) + '</b><p>' + escapeHtml(n.message) + '</p>' +
+        '<span class="notif-time">' + escapeHtml(fmtNotifTime(n.time)) + '</span></div>' +
+        '<button class="notif-x" data-notif-x="' + escapeHtml(n.id) + '" aria-label="Dismiss notification">✕</button></div>'
+      ).join('');
+      el.notifList.querySelectorAll('[data-notif-x]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); dismissNotification(b.dataset.notifX); }));
+      el.notifList.querySelectorAll('.notif-item').forEach(item => {
+        const mark = () => markNotificationRead(item.dataset.notifId);
+        item.addEventListener('click', mark);
+        item.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); mark(); } });
+      });
+    }
+    if (el.notifEmpty) el.notifEmpty.style.display = list.length ? 'none' : '';
+    if (el.markAllReadBtn) el.markAllReadBtn.style.display = list.length && unread ? '' : 'none';
+    if (el.clearAllBtn) el.clearAllBtn.style.display = list.length ? '' : 'none';
+  }
+  function markNotificationRead(id) {
+    const list = loadNotifications();
+    const n = list.find(x => x.id === id);
+    if (n && !n.read) { n.read = true; saveNotifications(list); renderNotifications(); }
+  }
+  function dismissNotification(id) {
+    saveNotifications(loadNotifications().filter(n => n.id !== id));
+    renderNotifications();
+  }
+  function markAllNotificationsRead() {
+    const list = loadNotifications();
+    list.forEach(n => { n.read = true; });
+    saveNotifications(list);
+    renderNotifications();
+  }
+  function clearAllNotifications() {
+    saveNotifications([]);
+    renderNotifications();
+  }
+  function openNotifPanel() {
+    if (!el.notifPanel) return;
+    renderNotifications();
+    el.notifPanel.style.display = '';
+    if (el.bellBtn) el.bellBtn.setAttribute('aria-expanded', 'true');
+    hideClearConfirm();
+  }
+  function closeNotifPanel() {
+    if (!el.notifPanel) return;
+    el.notifPanel.style.display = 'none';
+    if (el.bellBtn) el.bellBtn.setAttribute('aria-expanded', 'false');
+    hideClearConfirm();
+  }
+  function toggleNotifPanel() {
+    if (!el.notifPanel) return;
+    el.notifPanel.style.display === 'none' ? openNotifPanel() : closeNotifPanel();
+  }
+  function showClearConfirm() {
+    if (el.notifActions) el.notifActions.style.display = 'none';
+    if (el.notifConfirm) el.notifConfirm.style.display = '';
+  }
+  function hideClearConfirm() {
+    if (el.notifActions) el.notifActions.style.display = '';
+    if (el.notifConfirm) el.notifConfirm.style.display = 'none';
+  }
+  /* Limit warnings: once per bucket per month. */
+  function notifyLimitReached(bucket) {
+    const key = 'out:' + bucket + ':' + monthKey();
+    const f = loadNotifFlags();
+    if (f[key]) return;
+    f[key] = true; saveNotifFlags(f);
+    addNotification('warning', 'Your monthly download limit has been reached',
+      'You have used all your available ' + (BUCKET_LABELS[bucket] || bucket) + ' downloads for this month. They reset on ' + nextResetDate() + '.');
+  }
+  function notifyLowRemaining(bucket) {
+    const left = quotaLeft(bucket);
+    const limit = settings.limits[bucket] || 0;
+    if (left <= 0 || left > Math.max(5, limit * 0.1)) return;
+    const key = 'low:' + bucket + ':' + monthKey();
+    const f = loadNotifFlags();
+    if (f[key]) return;
+    f[key] = true; saveNotifFlags(f);
+    addNotification('warning', 'Your monthly downloads are running low',
+      'You have ' + left + ' ' + (BUCKET_LABELS[bucket] || bucket) + ' download' + (left === 1 ? '' : 's') + ' left this month. They reset on ' + nextResetDate() + '.');
+  }
+  function notifyFetchFailed(e, tool) {
+    if (tool === 'to_song') {
+      addNotification('error', 'We couldn\'t convert your video', 'Please try again with a different video.');
+      return;
+    }
+    const raw = String((e && e.message) || e || '');
+    if (/No profile found|No profile picture|has no bio/.test(raw)) {
+      addNotification('error', 'We couldn\'t find that profile', 'Please check the name and try again.');
+    } else if (isServiceError(e)) {
+      addNotification('error', 'This service is temporarily unavailable', 'Please try again later.');
+    } else {
+      addNotification('error', 'We couldn\'t get your video', 'Please check the link and try again.');
+    }
+  }
 
   /* ---------- converter progress (mirrors the real download progress) ---------- */
   function showConvertProgress(pct, text) {
@@ -372,7 +574,7 @@
   /* ---------- API calls ---------- */
   function needKey() {
     if (!settings.rapidapiKey) {
-      setStatus('No RapidAPI key is available — the built-in key is missing. (Or press “Demo preview” to see the layout without a key.)', 'err');
+      setStatus('This service is temporarily unavailable. Please try again later.', 'err');
       return false;
     }
     return true;
@@ -717,20 +919,21 @@
     if (tool === 'to_song' && detected.platform === 'instagram') bucket = 'instagram';
     if (isFileMode) bucket = null;
     if (bucket && (isHostDisabled(bucket) || (detected.platform === 'facebook' && isHostDisabled('facebook')))) {
-      setStatus('This service is temporarily disabled by the admin. Please try another platform.', 'err');
+      setStatus('This service is temporarily unavailable. Please try another one.', 'err');
       return;
     }
     if (bucket && quotaLeft(bucket) <= 0) {
-      setStatus('Monthly limit reached for ' + bucket + ' (' + settings.limits[bucket] + '/month). It resets ' + nextResetDate() + '.', 'err');
+      setStatus('You have used all your available downloads for this month. Your downloads reset on ' + nextResetDate() + '.', 'err');
+      notifyLimitReached(bucket);
       return;
     }
     if (!isFileMode && !needKey()) return;
 
     el.fetchBtn.disabled = true;
-    el.fetchBtn.textContent = tool === 'to_song' ? 'Converting…' : 'Fetching…';
+    el.fetchBtn.textContent = tool === 'to_song' ? 'Converting…' : 'Loading…';
     if (el.convertBtn) el.convertBtn.disabled = true;
-    setStatus(isFileMode ? '<span class="spinner"></span>Converting your file… (no API call — it never leaves your device)' : '<span class="spinner"></span>Checking the video… (uses 1 API call)', 'info');
-    if (tool === 'to_song') showConvertProgress(5, isFileMode ? 'Converting your file…' : 'Converting… loading the converter engine');
+    setStatus(isFileMode ? '<span class="spinner"></span>Converting your file…' : '<span class="spinner"></span>Preparing your video…', 'info');
+    if (tool === 'to_song') showConvertProgress(5, isFileMode ? 'Converting your file…' : 'Preparing your audio…');
     el.previewCard.classList.remove('show');
 
     try {
@@ -738,7 +941,7 @@
       if (isFileMode) {
         // Local file: no API, no upload — the audio is extracted on
         // the device with ffmpeg.wasm.
-        showConvertProgress(5, 'Loading converter engine… (one-time download, ~30 MB)');
+        showConvertProgress(5, 'Preparing the converter…');
         const bytes = new Uint8Array(await uploadFile.arrayBuffer());
         result = await convertVideoToAudio(bytes, uploadFile.name.replace(/\.[^.]+$/, ''), '', p => showConvertProgress(10 + Math.round(p * 85), 'Extracting audio… ' + Math.round(p * 100) + '%'));
       } else if (profileRef) {
@@ -779,13 +982,13 @@
             }
           }
         }
-        if (!bytes) throw new Error('Could not download this Reel right now — Instagram’s server could not be reached from this browser. Please try again in a moment.');
+        if (!bytes) throw new Error('We couldn\'t get this video right now. Please try again in a moment.');
         await enginePromise;
         result = await convertVideoToAudio(bytes, vid.title, vid.thumbnail, p => showConvertProgress(40 + Math.round(p * 55), 'Extracting audio… ' + Math.round(p * 100) + '%'));
       } else if (tool === 'to_song') {
         // YouTube / Facebook audio still needs their API for the video
         // URL — say so plainly instead of showing a confusing 404.
-        throw new Error('YouTube and Facebook audio still need their API subscription on RapidAPI (it asks for a card). Instagram Reels convert now — paste an Instagram Reel link, or upload a video file below.');
+        throw new Error('YouTube and Facebook audio isn\'t available right now. Instagram Reels convert now — paste an Instagram Reel link, or upload a video file below.');
       } else if (detected.platform === 'youtube' && tool !== 'to_song') {
         result = await fetchYouTube(url).catch(() => fetchAllInOne(url)); // YT fallback: all-in-one
       } else {
@@ -807,17 +1010,22 @@
         result.isAudio = true;
       }
 
-      if (bucket) bumpQuota(bucket); // count AFTER a successful fetch (file mode uses no API call)
+      if (bucket) { bumpQuota(bucket); notifyLowRemaining(bucket); } // count AFTER a successful fetch (file mode uses no download)
       currentResult = Object.assign(result, { sourceUrl: url, platform: detected.platform, tool, bucket });
       renderPreview(result);
-      if (tool === 'to_song') showConvertProgress(100, 'Audio ready — press Download to save it.');
-      if (isFileMode) setStatus('Audio extracted from your file ✓ — press Download to save it. (No API call used.)', 'ok');
-      else if (tool === 'to_song') setStatus('Audio extracted in your browser ✓ — press Download to save it. (1 ' + bucket + ' call used, ' + quotaLeft(bucket) + ' left this month.)', 'ok');
-      else setStatus('Video found ✓ — pick a quality, then Download. (1 ' + bucket + ' call used, ' + quotaLeft(bucket) + ' left this month.)', 'ok');
+      if (tool === 'to_song') {
+        showConvertProgress(100, 'Audio ready — press Download to save it.');
+        addNotification('success', 'Your audio is ready', 'Your audio file is ready — press Download to save it.');
+      }
+      if (isFileMode) setStatus('Your audio is ready — press Download to save it.', 'ok');
+      else if (tool === 'to_song') setStatus('Your audio is ready — press Download to save it.', 'ok');
+      else setStatus('Your video is ready — pick a quality, then press Download.', 'ok');
       await logFetch(url, detected.platform, tool, bucket);
     } catch (e) {
-      if (tool === 'to_song') showConvertProgress(0, 'Conversion failed — try again with a different link.');
-      setStatus('Could not fetch this video: ' + escapeHtml(e.message || e), 'err');
+      console.warn('[downloader] fetch failed:', e);
+      if (tool === 'to_song') showConvertProgress(0, 'We couldn\'t convert your video. Please try again.');
+      setStatus(friendlyError(e), 'err');
+      notifyFetchFailed(e, tool);
     } finally {
       el.fetchBtn.disabled = false;
       el.fetchBtn.textContent = fetchBtnLabel(currentTool);
@@ -901,9 +1109,9 @@
     }
     el.downloadNote.textContent = r.isAudio
       ? (r.convertedLocally
-        ? 'Audio extracted in your browser from the video — no server was used, the file never left your device. Press Download to save it.'
-        : (r.wavFallback ? 'WAV is not returned by the API — saved as MP3 instead. ' : '') +
-          'Audio download: this saves the audio stream the API returns (.mp3 / .m4a). If the API returns video-only, pick the audio format above.')
+        ? 'Your audio is ready — press Download to save it.'
+        : (r.wavFallback ? 'WAV isn\'t available for this video — saved as MP3 instead. ' : '') +
+          'Press Download to save the audio file.')
       : 'Download saves the file straight to your Downloads folder (PC) or Files/Downloads (phone).';
 
     // Quality pills — IG usually returns a single 720p HD URL; YT/FB return several.
@@ -959,8 +1167,17 @@
   }
 
   /* ---------- download (anchor + blob fallback) ---------- */
+  function shortTitle(t) {
+    const s = String(t || 'video').replace(/\s+/g, ' ').trim();
+    return s.length > 60 ? s.slice(0, 57) + '…' : s;
+  }
+  function notifyDownloadStarted() {
+    const isAudio = !!(currentResult && currentResult.isAudio);
+    addNotification('success', isAudio ? 'Your audio is ready' : 'Your video is ready',
+      '“' + shortTitle(currentResult && currentResult.title) + '” has started downloading — check your Downloads folder.');
+  }
   async function handleDownload() {
-    if (!currentResult || !selectedQuality) { setStatus('Fetch a video first, then pick a quality.', 'err'); return; }
+    if (!currentResult || !selectedQuality) { setStatus('Get a video first, then pick a quality.', 'err'); return; }
     const f = selectedQuality;
     const ext = (f.ext || 'mp4').replace(/[^a-z0-9]/gi, '') || 'mp4';
     const base = (currentResult.title || 'video').replace(/[^a-z0-9\-_ ]/gi, '').trim().replace(/\s+/g, '_').slice(0, 60) || 'video';
@@ -978,7 +1195,8 @@
       el.progressBar.style.width = '100%';
       el.progressText.textContent = 'Saved: ' + filename;
       mirrorDownloadProgress();
-      setStatus('Download started ✓ — check your Downloads folder.', 'ok');
+      setStatus('Your download has started — check your Downloads folder.', 'ok');
+      notifyDownloadStarted();
       return;
     }
     // Try a blob download first so the file lands in Downloads even when
@@ -1014,30 +1232,32 @@
       el.progressBar.style.width = '100%';
       el.progressText.textContent = 'Saved: ' + filename;
       mirrorDownloadProgress();
-      setStatus('Download started ✓ — check your Downloads folder.', 'ok');
+      setStatus('Your download has started — check your Downloads folder.', 'ok');
+      notifyDownloadStarted();
     } catch (e) {
       // Fallback: direct anchor (works when the CDN allows it; the file
       // may open in a new tab on some phones — long-press → Save).
-      // Say plainly that the direct download failed and why, instead of
+      // Say plainly that the direct download failed, instead of
       // implying it worked.
       const a = document.createElement('a');
       a.href = f.url; a.download = filename; a.target = '_blank'; a.rel = 'noopener'; a.click();
-      el.progressText.textContent = 'Direct download failed — opened the video link instead. If it does not load, try again on another network or Wi-Fi.';
-      setStatus('The file could not be downloaded directly — this browser could not reach the video server. A direct link was opened instead; if it also fails to load, try again on another network or Wi-Fi.', 'err');
+      el.progressText.textContent = 'The file couldn\'t be saved directly — the video link was opened instead. If it doesn\'t load, try again on another network or Wi-Fi.';
+      setStatus('We couldn\'t save your file directly. A link was opened instead — if it doesn\'t load, please try again.', 'err');
+      addNotification('info', 'Download opened in a new tab', 'We couldn\'t save the file directly, so the video link was opened instead.');
     }
   }
 
   /* ---------- demo preview (no key) ---------- */
   function loadDemo() {
     currentResult = {
-      title: 'Demo Reel — sample preview (no API key used)',
-      caption: 'This is a demo so you can see the layout: thumbnail, caption, quality pills and the Download button — without spending an API call.',
+      title: 'Demo Reel — sample preview',
+      caption: 'This is a demo so you can see the layout: thumbnail, caption, quality pills and the Download button.',
       author: 'demo_account', thumbnail: '', duration: '0:15',
       formats: [{ quality: '720p HD', label: 'MP4 · demo', ext: 'mp4', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4' }],
       sourceUrl: '', platform: 'instagram', tool: currentTool, bucket: 'instagram'
     };
     renderPreview(currentResult);
-    setStatus('Demo preview loaded — no API call used. Paste a real link and press Fetch to download a real video.', 'info');
+    setStatus('Demo preview loaded. Paste a real link and press Get Video to download a real video.', 'info');
   }
 
   /* ---------- tool switching ---------- */
@@ -1053,14 +1273,14 @@
   const TOOL_TEXT = {
     dashboard: ['Dash<span>board</span>', 'Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
     ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link — preview it, then download in HD.'],
-    ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — fetch while it is still live. Uses the all-in-one API.'],
-    ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real profile picture. Uses Scrappa (free, no card needed).'],
-    ig_caption: ['Copy Reel <span>Caption</span>', 'Fetch a Reel, then copy its caption to the clipboard in one tap.'],
-    ig_bio: ['Copy <span>Bio</span>', 'Paste a profile link, or type a username or account ID — fetches the real bio from Instagram. Uses Scrappa (free, no card needed).'],
-    fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link — preview it, then download. Uses the all-in-one API.'],
+    ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — get it while it is still live.'],
+    ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real profile picture.'],
+    ig_caption: ['Copy Reel <span>Caption</span>', 'Get a Reel, then copy its caption to the clipboard in one tap.'],
+    ig_bio: ['Copy <span>Bio</span>', 'Paste a profile link, or type a username or account ID — gets the real bio from Instagram.'],
+    fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link — preview it, then download.'],
     yt_short: ['YouTube <span>Short</span>', 'Paste a YouTube Shorts link (youtube.com/shorts/… or youtu.be/…) and download it.'],
     yt_full: ['YouTube <span>Video</span>', 'Paste a full YouTube video link (youtube.com/watch?v=…) and pick a quality.'],
-    to_song: ['Video to <span>Song</span>', 'Paste an Instagram Reel link — the audio is extracted in your browser and saved as .mp3 / .m4a / .wav (real WAV, no fallback). YouTube and Facebook audio still need their API subscription.']
+    to_song: ['Video to <span>Song</span>', 'Paste an Instagram Reel link — the audio is saved as .mp3 / .m4a / .wav. YouTube and Facebook audio isn\'t available right now.']
   };
   const PAGE_FOR_TOOL = { dashboard: 'dashboard', ig_reel: 'instagram', ig_story: 'instagram', ig_dp: 'instagram', ig_caption: 'instagram', ig_bio: 'instagram', fb_video: 'facebook', yt_short: 'youtube', yt_full: 'youtube', to_song: 'converter' };
   function setTool(tool) {
@@ -1178,12 +1398,12 @@
   }));
   el.copyCaptionBtn.addEventListener('click', () => {
     if (currentResult && currentResult.caption) copyText(currentResult.caption, 'Caption copied to clipboard ✓');
-    else setStatus('No caption on this video — fetch a Reel first.', 'err');
+    else setStatus('No caption on this video — get a Reel first.', 'err');
   });
   el.copyLinkBtn.addEventListener('click', () => {
     const link = selectedQuality ? selectedQuality.url : (currentResult && currentResult.sourceUrl);
     if (link) copyText(link, 'Video link copied ✓');
-    else setStatus('Nothing to copy yet — fetch a video first.', 'err');
+    else setStatus('Nothing to copy yet — get a video first.', 'err');
   });
   el.usernameBtn.addEventListener('click', () => {
     // One helper for all three input forms: a full profile link, a bare
@@ -1223,6 +1443,65 @@
     } catch (e) { el.settingsMsg.textContent = 'Could not reach the Apps Script URL — check it is deployed as Web App, Execute as Me, Anyone.'; }
   });
 
+  /* ---------- notifications: bell + panel ---------- */
+  if (el.bellBtn) el.bellBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleNotifPanel(); });
+  if (el.notifCloseBtn) el.notifCloseBtn.addEventListener('click', closeNotifPanel);
+  if (el.markAllReadBtn) el.markAllReadBtn.addEventListener('click', markAllNotificationsRead);
+  if (el.clearAllBtn) el.clearAllBtn.addEventListener('click', showClearConfirm);
+  if (el.confirmClearBtn) el.confirmClearBtn.addEventListener('click', () => { clearAllNotifications(); hideClearConfirm(); });
+  if (el.cancelClearBtn) el.cancelClearBtn.addEventListener('click', hideClearConfirm);
+  document.addEventListener('click', (e) => {
+    if (el.notifPanel && el.notifPanel.style.display !== 'none' && el.notifWrap && !el.notifWrap.contains(e.target)) closeNotifPanel();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNotifPanel(); });
+
+  /* ---------- drag & drop ----------
+     Both the converter card and the main fetch card accept drops.
+     Dropping a video file on the converter selects it for conversion;
+     dropping one on the fetch card opens the converter with the file
+     ready. Dropping a link (dragged text) fills the URL box. */
+  function setAudioFile(file) {
+    if (!file || !el.audioFileInput) return false;
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      el.audioFileInput.files = dt.files;
+    } catch { return false; }
+    if (el.audioFileName) el.audioFileName.textContent = 'Chosen: ' + file.name + ' — press Convert to Audio to extract its song. (If you paste a URL above, the URL is used instead.)';
+    return true;
+  }
+  function isVideoFile(file) {
+    return !!(file && (/^video\//.test(file.type) || /^audio\//.test(file.type) || /\.(mp4|mov|mkv|webm|avi|m4v|mp3|m4a|wav|ogg)$/i.test(file.name || '')));
+  }
+  function handleDropOnCard(e) {
+    e.preventDefault();
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) {
+      const file = files[0];
+      if (!isVideoFile(file)) { setStatus('That file is not a video — drop a video file (MP4, MOV, MKV, WebM…).', 'err'); return; }
+      if (currentTool !== 'to_song') setTool('to_song');
+      if (setAudioFile(file)) setStatus('File ready — press Convert to Audio to extract its song.', 'ok');
+      else setStatus('This browser could not take the dropped file — use “Choose file” instead.', 'err');
+      return;
+    }
+    const text = e.dataTransfer ? e.dataTransfer.getData('text') : '';
+    if (text && el.urlInput) {
+      el.urlInput.value = text.trim();
+      setStatus('Link ready — press ' + fetchBtnLabel(currentTool).replace('▶ ', '') + ' to continue.', 'info');
+    }
+  }
+  function wireDropZone(card) {
+    if (!card) return;
+    ['dragenter', 'dragover'].forEach(ev => card.addEventListener(ev, (e) => { e.preventDefault(); card.classList.add('drag-over'); }));
+    card.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !card.contains(e.relatedTarget)) card.classList.remove('drag-over'); });
+    card.addEventListener('drop', (e) => { card.classList.remove('drag-over'); handleDropOnCard(e); });
+  }
+  wireDropZone(el.converterCard);
+  wireDropZone(el.fetchCard);
+  // Never let a missed drop navigate the page away to the file.
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
+
   // Auto-detect platform as the user pastes, and switch the tool label.
   // Only switch on a COMPLETE link: while a URL is still being typed,
   // "instagram.com/" on its own looks like a profile link, so switching
@@ -1258,6 +1537,7 @@
   applyAppSettings();
   renderQuota();
   renderHistory();
+  renderNotifications();
   renderSettings();
   // Run the dashboard page setup on load too — setTool() is what hides
   // the "Download a Video" fetch card on the dashboard, and without this

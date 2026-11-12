@@ -99,7 +99,10 @@ const DEFAULT_LIMITS = {
 const STORE = {
   settings: 'vd_settings',        // { rapidapiKey, hosts:{}, limits:{}, appsScriptUrl }
   quota: 'vd_quota',              // { "YYYY-MM": { instagram: n, youtube: n, ... } }
-  history: 'vd_history'           // [ { date, time, device, platform, tool, video_url, quality, city, lat, lng, mapsLink } ]
+  history: 'vd_history',          // [ { date, time, device, platform, tool, video_url, quality, city, lat, lng, mapsLink } ]
+  notifications: 'vd_notifications', // [ { id, type, title, message, time, read, userId } ] — user notifications, per browser
+  notifFlags: 'vd_notif_flags',   // { "low:instagram:2026-11": true, ... } — limit warnings sent once per bucket per month
+  userId: 'vd_user_id'            // anonymous per-browser ID (the app has no login; this keeps notifications separate per browser)
 };
 
 /** Tools shown in the sidebar. `platform` drives quota bucket + logging. */
