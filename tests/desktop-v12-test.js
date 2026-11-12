@@ -85,13 +85,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       hasPreviewCard: !!document.getElementById('previewCard'),
       title: document.getElementById('resultTitle').textContent,
       captionShown: document.getElementById('resultCaption').style.display !== 'none',
+      copyShown: document.getElementById('copyCaptionBtn').style.display !== 'none',
+      downloadLabel: document.getElementById('downloadBtn').textContent,
       options: Array.from(sel.options).map((o) => o.textContent),
       downloadEnabled: !document.getElementById('downloadBtn').disabled,
       order
     };
   });
   check('result card: no video element, no Preview card', !r.hasVideo && !r.hasPreviewCard);
-  check('result card: title + caption shown', /My test reel caption/.test(r.title) && r.captionShown, r.title);
+  check('result card: title shown, caption box hidden for video tools', /My test reel caption/.test(r.title) && !r.captionShown, r.title);
+  check('result card: copy button hidden for video tools', !r.copyShown);
+  check('result card: button labelled "Download Reel"', r.downloadLabel === '⬇ Download Reel', r.downloadLabel);
   check('result card: Original option in the dropdown', r.options.length === 1 && /^Original — 720p HD · MP4$/.test(r.options[0]), JSON.stringify(r.options));
   check('result card: Download enabled', r.downloadEnabled);
   const tops = Object.fromEntries(r.order.map((o) => [o.id, o.top]));
@@ -102,6 +106,46 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(400);
   await p.screenshot({ path: SHOTS + '/desktop-result.png' });
   await p.close();
+
+  /* ---------- C. DP result: picture + Download DP only ---------- */
+  const d = await browser.newPage();
+  await d.setViewport({ width: 1280, height: 900 });
+  await d.evaluateOnNewDocument(SEED + `
+const _realFetch2 = window.fetch.bind(window);
+window.fetch = async (url, opts) => {
+  const u = String(url);
+  if (u.includes('scrappa.co')) {
+    return { ok: true, json: async () => ({ user: { username: 'mr.kaifu_4u', full_name: 'Kaif', profile_pic_url: 'https://fake-cdn/dp.jpg', profile_pic_url_hd: null, biography: 'AI/ML Engineer.', follower_count: 10, following_count: 5, media_count: 13 } }) };
+  }
+  return _realFetch2(url, opts);
+};
+`);
+  await d.goto(BASE, { waitUntil: 'networkidle2', timeout: 60000 });
+  await sleep(800);
+  await d.click('.nav-item[data-tool="ig_reel"]');
+  await sleep(400);
+  await d.click('.tab[data-tab-tool="ig_dp"]');
+  await sleep(400);
+  await d.type('#urlInput', 'https://www.instagram.com/mr.kaifu_4u/');
+  await d.click('#fetchBtn');
+  await d.waitForFunction(() => document.getElementById('resultCard').classList.contains('show'), { timeout: 20000 });
+  await sleep(500);
+  const dp = await d.evaluate(() => ({
+    picShown: document.getElementById('resultImage').style.display !== 'none',
+    captionShown: document.getElementById('resultCaption').style.display !== 'none',
+    qualityShown: document.getElementById('qualityRow').style.display !== 'none',
+    copyShown: document.getElementById('copyCaptionBtn').style.display !== 'none',
+    downloadLabel: document.getElementById('downloadBtn').textContent
+  }));
+  check('DP result: picture shown', dp.picShown);
+  check('DP result: bio text hidden', !dp.captionShown);
+  check('DP result: quality row hidden', !dp.qualityShown);
+  check('DP result: copy button hidden', !dp.copyShown);
+  check('DP result: button labelled "Download DP"', dp.downloadLabel === '⬇ Download DP', dp.downloadLabel);
+  await d.evaluate(() => document.getElementById('resultCard').scrollIntoView());
+  await sleep(400);
+  await d.screenshot({ path: SHOTS + '/desktop-result-dp.png' });
+  await d.close();
 
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

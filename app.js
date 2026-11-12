@@ -26,7 +26,7 @@
     resultCard: $('resultCard'), resultTitle: $('resultTitle'),
     resultCaption: $('resultCaption'), resultImage: $('resultImage'),
     downloadBtn: $('downloadBtn'),
-    copyCaptionBtn: $('copyCaptionBtn'), copyLinkBtn: $('copyLinkBtn'),
+    copyCaptionBtn: $('copyCaptionBtn'),
     progress: $('progress'), progressBar: $('progressBar'), progressText: $('progressText'),
     downloadNote: $('downloadNote'), quotaGrid: $('quotaGrid'),
     historyList: $('historyList'), apiKeyInput: $('apiKeyInput'),
@@ -1125,18 +1125,45 @@
     await logToSheet(entry);
   }
 
-  /* ---------- download result (no video preview — v12) ---------- */
+  /* ---------- download result (no video preview — v12) ----------
+     Per-tool controls (v13): each feature shows ONLY its own buttons.
+     Video downloads get the quality dropdown + their own Download
+     button. Copy tools get the text + their Copy button and nothing
+     else (no download, no quality). DP gets the picture + Download DP
+     only — no caption text, no quality, no copy buttons. The converter
+     gets Download Audio only. */
+  const VIDEO_TOOLS = ['ig_reel', 'ig_story', 'yt_short', 'yt_full', 'fb_video'];
+  const DOWNLOAD_LABEL = {
+    ig_reel: '⬇ Download Reel', ig_story: '⬇ Download Story', ig_dp: '⬇ Download DP',
+    yt_short: '⬇ Download Short', yt_full: '⬇ Download Video', fb_video: '⬇ Download Video',
+    to_song: '⬇ Download Audio'
+  };
   function renderResult(r) {
     selectedQuality = null;
+    const isVideoDownload = VIDEO_TOOLS.includes(currentTool);
+    const isCopyTool = currentTool === 'ig_caption' || currentTool === 'ig_bio';
     el.resultCard.classList.add('show');
     el.resultTitle.textContent = (r.author ? r.author + ' — ' : '') + (r.title || 'Untitled video');
-    if (r.caption) { el.resultCaption.style.display = 'block'; el.resultCaption.textContent = r.caption; }
+    // Caption/bio text is the product ONLY for the copy tools. On video
+    // and DP pages it is clutter — the title line already names the
+    // video, and the bio does not belong on the DP page.
+    if (isCopyTool && r.caption) { el.resultCaption.style.display = 'block'; el.resultCaption.textContent = r.caption; }
     else el.resultCaption.style.display = 'none';
 
     const first = r.formats[0];
-    // No downloadable format (e.g. Copy Bio) means nothing to download.
-    if (el.downloadBtn) el.downloadBtn.disabled = !r.formats.length;
     const isImage = first && /^(jpg|jpeg|png|webp|gif)$/i.test(first.ext || '');
+    // Download button: hidden for copy tools (nothing to download),
+    // labelled per feature otherwise; disabled when no file exists.
+    if (el.downloadBtn) {
+      el.downloadBtn.style.display = isCopyTool ? 'none' : '';
+      el.downloadBtn.textContent = DOWNLOAD_LABEL[currentTool] || '⬇ Download';
+      el.downloadBtn.disabled = !r.formats.length;
+    }
+    // Copy button: only the copy tools, labelled per feature.
+    if (el.copyCaptionBtn) {
+      el.copyCaptionBtn.style.display = isCopyTool ? '' : 'none';
+      el.copyCaptionBtn.textContent = currentTool === 'ig_bio' ? 'Copy Bio' : 'Copy Caption';
+    }
     // DP Download: show the picture itself — it IS the download, not a preview.
     if (isImage) {
       el.resultImage.style.display = 'block';
@@ -1153,10 +1180,11 @@
     // as uploaded). Instagram returns a single file, so the list has
     // one entry; YouTube/Facebook return several when their APIs work.
     // Only real formats are ever listed — no invented qualities.
-    const order = { '1080p': 1, '720p': 2, '480p': 3, '360p': 4, '240p': 5 };
+    const order = { '2160p': 0, '4k': 0, '1440p': 1, '2k': 1, '1080p': 2, '720p': 3, '480p': 4, '360p': 5, '240p': 6 };
+    const q = (f) => (f.quality || '').toLowerCase();
     const sorted = r.formats.slice().sort((a, b) => {
-      const qa = Object.keys(order).find(k => (a.quality || '').includes(k));
-      const qb = Object.keys(order).find(k => (b.quality || '').includes(k));
+      const qa = Object.keys(order).find(k => q(a).includes(k));
+      const qb = Object.keys(order).find(k => q(b).includes(k));
       return (qa ? order[qa] : 9) - (qb ? order[qb] : 9);
     });
     if (sorted.length && !isImage && !r.isAudio) {
@@ -1164,9 +1192,9 @@
       sorted[0] = { quality: 'Original', label: (best.quality || '') + (best.ext ? ' · ' + best.ext.toUpperCase() : ''), ext: best.ext, url: best.url };
     }
     lastSortedFormats = sorted;
-    // The dropdown only makes sense for video files — pictures (DP)
-    // and converted audio have no video qualities to choose from.
-    const showQuality = sorted.length > 0 && !isImage && !r.isAudio;
+    // The dropdown only makes sense for video downloads — copy tools,
+    // DP and converted audio have no video qualities to choose from.
+    const showQuality = sorted.length > 0 && isVideoDownload && !isImage && !r.isAudio;
     if (el.qualityRow) el.qualityRow.style.display = showQuality ? '' : 'none';
     if (showQuality && el.qualitySelect) {
       el.qualitySelect.innerHTML = sorted.map((f, i) =>
@@ -1423,13 +1451,11 @@
     if (t && t !== currentTool) setTool(t);
   }));
   el.copyCaptionBtn.addEventListener('click', () => {
-    if (currentResult && currentResult.caption) copyText(currentResult.caption, 'Caption copied to clipboard ✓');
+    if (currentResult && currentResult.caption) {
+      const what = currentTool === 'ig_bio' ? 'Bio' : 'Caption';
+      copyText(currentResult.caption, what + ' copied to clipboard ✓');
+    } else if (currentTool === 'ig_bio') setStatus('No bio on this profile — get a profile first.', 'err');
     else setStatus('No caption on this video — get a Reel first.', 'err');
-  });
-  el.copyLinkBtn.addEventListener('click', () => {
-    const link = selectedQuality ? selectedQuality.url : (currentResult && currentResult.sourceUrl);
-    if (link) copyText(link, 'Video link copied ✓');
-    else setStatus('Nothing to copy yet — get a video first.', 'err');
   });
   el.usernameBtn.addEventListener('click', () => {
     // One helper for all three input forms: a full profile link, a bare

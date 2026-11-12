@@ -338,3 +338,29 @@ pick, DP, Bio), `tests/desktop-v12-test.js` 9/9 in real Chrome
 API, section order), mobile 390px still 14/14, and all older suites
 still pass (backend 64, sheet-logging 11, retry 4, history-filter 11,
 admin-role 24).
+
+## v13 — per-feature buttons + full quality ladder (2026-11-12)
+
+The result card used to show the same buttons for every tool, so DP
+Download showed Copy Caption / Copy Video Link and the bio text.
+Now each feature shows only its own controls (`renderResult` in
+app.js, driven by `currentTool`): video downloads (Reel, Story,
+YouTube Short/Full, Facebook) get the quality dropdown + their own
+labelled Download button (Download Reel / Download Story / Download
+Short / Download Video); DP gets the picture + Download DP only (no
+bio text, no quality, no copy buttons); Copy Caption gets the caption
+text + Copy Caption only; Copy Bio gets the bio text + Copy Bio only
+(the Copy button is relabelled per feature and the copied message
+says Bio/Caption accordingly); the converter gets Download Audio
+only. Copy Video Link is removed entirely — it belonged to no
+feature. The caption/bio text box now appears only for the copy
+tools; on video pages the title line already names the video. The
+quality sort ladder now covers 2160p/4K and 1440p/2K above 1080p
+(case-insensitive match), still listing only real formats with the
+best first as Original. Verified: `tests/result-quality-test.js`
+rewritten to a per-tool matrix, 39/39 across all 8 tools (incl. 4K
+sorting first and the 480p pick downloading the 480p file),
+`tests/desktop-v12-test.js` extended with DP checks 16/16 in real
+Chrome, mobile 390px still 14/14, and all older suites still pass
+(backend 64, sheet-logging 11, retry 4, history-filter 11,
+admin-role 24).
