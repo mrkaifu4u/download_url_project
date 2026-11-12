@@ -1,6 +1,6 @@
 /* ==========================================================================
    Video Downloader — app.js
-   Flow: paste URL -> Fetch (1 API call) -> preview on screen ->
+   Flow: paste URL -> Fetch (1 API call) -> result on screen ->
          pick quality -> Download straight to PC / phone.
    A built-in RapidAPI key (config.js, owner's choice, public repo) is
    used when no key is saved in this browser; a saved key overrides it.
@@ -23,10 +23,9 @@
     fetchTitle: $('fetchTitle'), fetchHint: $('fetchHint'),
     urlInput: $('urlInput'), fetchBtn: $('fetchBtn'), status: $('status'),
     usernameRow: $('usernameRow'), usernameInput: $('usernameInput'), usernameBtn: $('usernameBtn'),
-    previewCard: $('previewCard'), previewVideo: $('previewVideo'), previewImage: $('previewImage'),
-    previewDuration: $('previewDuration'), previewTitle: $('previewTitle'),
-    previewAuthor: $('previewAuthor'), previewCaption: $('previewCaption'),
-    qualityList: $('qualityList'), downloadBtn: $('downloadBtn'),
+    resultCard: $('resultCard'), resultTitle: $('resultTitle'),
+    resultCaption: $('resultCaption'), resultImage: $('resultImage'),
+    downloadBtn: $('downloadBtn'),
     copyCaptionBtn: $('copyCaptionBtn'), copyLinkBtn: $('copyLinkBtn'),
     progress: $('progress'), progressBar: $('progressBar'), progressText: $('progressText'),
     downloadNote: $('downloadNote'), quotaGrid: $('quotaGrid'),
@@ -53,7 +52,7 @@
   let currentTool = 'dashboard';
   let currentResult = null;   // normalised fetch result
   let selectedQuality = null; // chosen format object
-  let lastSortedFormats = []; // formats of the current preview, in pill order
+  let lastSortedFormats = []; // formats of the current result, best first
   let showAllHistory = false;
   let trendDays = 7;
   let audioFormatChoice = 'mp3';
@@ -994,7 +993,7 @@
     if (el.convertBtn) el.convertBtn.disabled = true;
     setStatus(isFileMode ? '<span class="spinner"></span>Converting your file…' : '<span class="spinner"></span>Preparing your video…', 'info');
     if (tool === 'to_song') showConvertProgress(5, isFileMode ? 'Converting your file…' : 'Preparing your audio…');
-    el.previewCard.classList.remove('show');
+    el.resultCard.classList.remove('show');
 
     try {
       let result;
@@ -1079,7 +1078,7 @@
         if (wanted.length) result.formats = wanted; // prefer the format picked in the converter
         // WAV is never returned by the API and cannot be transcoded in the
         // browser: picking WAV falls back to the MP3/M4A stream, and the
-        // preview note says so plainly instead of pretending a WAV exists.
+        // result note says so plainly instead of pretending a WAV exists.
         result.wavFallback = audioFormatChoice === 'wav' &&
           !result.formats.some(f => (f.ext || '').toLowerCase() === 'wav');
         result.isAudio = true;
@@ -1087,7 +1086,7 @@
 
       if (bucket) { bumpQuota(bucket); notifyLowRemaining(bucket); } // count AFTER a successful fetch (file mode uses no download)
       currentResult = Object.assign(result, { sourceUrl: url, platform: detected.platform, tool, bucket });
-      renderPreview(result);
+      renderResult(result);
       if (tool === 'to_song') {
         showConvertProgress(100, 'Audio ready — press Download to save it.');
         addNotification('success', 'Your audio is ready', 'Your audio file is ready — press Download to save it.');
@@ -1126,62 +1125,23 @@
     await logToSheet(entry);
   }
 
-  /* ---------- preview ---------- */
-  function renderPreview(r) {
+  /* ---------- download result (no video preview — v12) ---------- */
+  function renderResult(r) {
     selectedQuality = null;
-    el.previewCard.classList.add('show');
-    el.previewTitle.textContent = r.title || 'Untitled video';
-    el.previewAuthor.innerHTML = r.author ? 'By <b>' + escapeHtml(r.author) + '</b>' : '';
-    if (r.caption) { el.previewCaption.style.display = 'block'; el.previewCaption.textContent = r.caption; }
-    else el.previewCaption.style.display = 'none';
-    if (r.duration) { el.previewDuration.style.display = 'block'; el.previewDuration.textContent = r.duration; }
-    else el.previewDuration.style.display = 'none';
+    el.resultCard.classList.add('show');
+    el.resultTitle.textContent = (r.author ? r.author + ' — ' : '') + (r.title || 'Untitled video');
+    if (r.caption) { el.resultCaption.style.display = 'block'; el.resultCaption.textContent = r.caption; }
+    else el.resultCaption.style.display = 'none';
 
     const first = r.formats[0];
     // No downloadable format (e.g. Copy Bio) means nothing to download.
     if (el.downloadBtn) el.downloadBtn.disabled = !r.formats.length;
-    const mediaBox = el.previewVideo.parentElement; // .preview-media
-    if (mediaBox) mediaBox.style.display = ''; // restore after an earlier failed preview hid it
-    // If the still thumbnail cannot be shown either, hide the (otherwise
-    // empty black) media box and say so plainly instead — the Download
-    // button still works.
-    const showThumbFallback = () => {
-      el.previewImage.style.display = 'none';
-      if (mediaBox) mediaBox.style.display = 'none';
-      el.downloadNote.textContent += ' Preview could not be shown in this browser — the Download button below still works.';
-    };
     const isImage = first && /^(jpg|jpeg|png|webp|gif)$/i.test(first.ext || '');
+    // DP Download: show the picture itself — it IS the download, not a preview.
     if (isImage) {
-      // DP Download: the "video" is a picture — show the image itself,
-      // not a video player trying to play a JPG.
-      el.previewVideo.style.display = 'none';
-      el.previewImage.style.display = 'block';
-      el.previewImage.src = first.url;
-      el.previewImage.onerror = showThumbFallback;
-    } else if (first) {
-      el.previewVideo.style.display = 'block';
-      el.previewImage.style.display = 'none';
-      el.previewVideo.poster = r.thumbnail || '';
-      el.previewVideo.src = first.url;
-      el.previewVideo.load();
-      // Instagram's CDN video sometimes will not play inline in a
-      // browser even though the same file downloads fine. If the
-      // player errors, fall back to the still thumbnail instead of a
-      // black box — the Download button still saves the real file.
-      el.previewVideo.onerror = () => {
-        if (r.thumbnail) {
-          el.previewVideo.style.display = 'none';
-          el.previewImage.style.display = 'block';
-          el.previewImage.src = r.thumbnail;
-          el.previewImage.onerror = showThumbFallback;
-        } else showThumbFallback();
-      };
-    } else if (r.thumbnail) {
-      el.previewVideo.style.display = 'none';
-      el.previewImage.style.display = 'block';
-      el.previewImage.src = r.thumbnail;
-      el.previewImage.onerror = showThumbFallback;
-    }
+      el.resultImage.style.display = 'block';
+      el.resultImage.src = first.url;
+    } else el.resultImage.style.display = 'none';
     el.downloadNote.textContent = r.isAudio
       ? (r.convertedLocally
         ? 'Your audio is ready — press Download to save it.'
@@ -1189,56 +1149,40 @@
           'Press Download to save the audio file.')
       : 'Download saves the file straight to your Downloads folder (PC) or Files/Downloads (phone).';
 
-    // Quality pills — IG usually returns a single 720p HD URL; YT/FB return several.
+    // Quality dropdown — best file first, labelled Original (the video
+    // as uploaded). Instagram returns a single file, so the list has
+    // one entry; YouTube/Facebook return several when their APIs work.
+    // Only real formats are ever listed — no invented qualities.
     const order = { '1080p': 1, '720p': 2, '480p': 3, '360p': 4, '240p': 5 };
     const sorted = r.formats.slice().sort((a, b) => {
       const qa = Object.keys(order).find(k => (a.quality || '').includes(k));
       const qb = Object.keys(order).find(k => (b.quality || '').includes(k));
       return (qa ? order[qa] : 9) - (qb ? order[qb] : 9);
     });
-    // "Original" = the best file the API returns (the video as uploaded).
-    // The top pill is relabelled Original (its real resolution stays as
-    // the small label), so picking Original downloads the best file and
-    // the download always follows the pill you picked. Not used for
-    // pictures (DP) or converted audio — those are not video qualities.
     if (sorted.length && !isImage && !r.isAudio) {
       const best = sorted[0];
       sorted[0] = { quality: 'Original', label: (best.quality || '') + (best.ext ? ' · ' + best.ext.toUpperCase() : ''), ext: best.ext, url: best.url };
     }
-    el.qualityList.innerHTML = '';
-    sorted.forEach((f, i) => {
-      const b = document.createElement('button');
-      b.className = 'qpill' + (i === 0 ? ' active' : '');
-      b.innerHTML = escapeHtml(f.quality) + '<small>' + escapeHtml(f.label || f.ext) + '</small>';
-      b.onclick = () => selectQuality(f);
-      el.qualityList.appendChild(b);
-      if (i === 0) selectedQuality = f;
-    });
-    if (!r.formats.length) el.qualityList.innerHTML = '<p class="empty">No quality options returned.</p>';
-    syncQualitySelect(sorted); // YouTube / Facebook quality <select> mirrors the pills
-    el.previewCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    lastSortedFormats = sorted;
+    // The dropdown only makes sense for video files — pictures (DP)
+    // and converted audio have no video qualities to choose from.
+    const showQuality = sorted.length > 0 && !isImage && !r.isAudio;
+    if (el.qualityRow) el.qualityRow.style.display = showQuality ? '' : 'none';
+    if (showQuality && el.qualitySelect) {
+      el.qualitySelect.innerHTML = sorted.map((f, i) =>
+        '<option value="' + i + '">' + escapeHtml(f.quality) + (f.label ? ' — ' + escapeHtml(f.label) : '') + '</option>').join('');
+      el.qualitySelect.value = '0';
+    }
+    if (sorted.length) selectedQuality = sorted[0];
+    el.resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
-  /* ---------- quality selection (pills + <select> stay in sync) ---------- */
+  /* ---------- quality selection ---------- */
   function selectQuality(f) {
     if (!f) return;
     selectedQuality = f;
     const idx = lastSortedFormats.indexOf(f);
-    el.qualityList.querySelectorAll('.qpill').forEach((x, i) => x.classList.toggle('active', i === idx));
     if (el.qualitySelect) el.qualitySelect.value = String(idx >= 0 ? idx : 0);
-    if (!currentResult || !currentResult.isAudio) { el.previewVideo.src = f.url; el.previewVideo.load(); }
-  }
-  function syncQualitySelect(sorted) {
-    lastSortedFormats = sorted || [];
-    if (!el.qualitySelect || !el.qualityRow) return;
-    const page = PAGE_FOR_TOOL[currentTool] || '';
-    const show = (page === 'youtube' || page === 'facebook') && lastSortedFormats.length > 0;
-    el.qualityRow.style.display = show ? '' : 'none';
-    if (!show) return;
-    el.qualitySelect.innerHTML = lastSortedFormats.map((f, i) =>
-      '<option value="' + i + '">' + escapeHtml(f.quality) + ' — ' + escapeHtml(f.label || f.ext || '') + '</option>').join('');
-    const idx = lastSortedFormats.indexOf(selectedQuality);
-    el.qualitySelect.value = String(idx >= 0 ? idx : 0);
   }
 
   /* ---------- download (anchor + blob fallback) ---------- */
@@ -1323,17 +1267,17 @@
     }
   }
 
-  /* ---------- demo preview (no key) ---------- */
+  /* ---------- demo result (no key; the demo button was removed — kept for debugging) ---------- */
   function loadDemo() {
     currentResult = {
-      title: 'Demo Reel — sample preview',
-      caption: 'This is a demo so you can see the layout: thumbnail, caption, quality pills and the Download button.',
+      title: 'Demo Reel — sample',
+      caption: 'This is a demo so you can see the layout: title, caption, quality dropdown and the Download button.',
       author: 'demo_account', thumbnail: '', duration: '0:15',
       formats: [{ quality: '720p HD', label: 'MP4 · demo', ext: 'mp4', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4' }],
       sourceUrl: '', platform: 'instagram', tool: currentTool, bucket: 'instagram'
     };
-    renderPreview(currentResult);
-    setStatus('Demo preview loaded. Paste a real link and press Get Video to download a real video.', 'info');
+    renderResult(currentResult);
+    setStatus('Demo loaded. Paste a real link and press Get Video to download a real video.', 'info');
   }
 
   /* ---------- tool switching ---------- */
@@ -1348,12 +1292,12 @@
 
   const TOOL_TEXT = {
     dashboard: ['Dash<span>board</span>', 'Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
-    ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link — preview it, then download in HD.'],
+    ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link and download it in HD.'],
     ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — get it while it is still live.'],
     ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real profile picture.'],
     ig_caption: ['Copy Reel <span>Caption</span>', 'Get a Reel, then copy its caption to the clipboard in one tap.'],
     ig_bio: ['Copy <span>Bio</span>', 'Paste a profile link, or type a username or account ID — gets the real bio from Instagram.'],
-    fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link — preview it, then download.'],
+    fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link and download it.'],
     yt_short: ['YouTube <span>Short</span>', 'Paste a YouTube Shorts link (youtube.com/shorts/… or youtu.be/…) and download it.'],
     yt_full: ['YouTube <span>Video</span>', 'Paste a full YouTube video link (youtube.com/watch?v=…) and pick a quality.'],
     to_song: ['Video to <span>Song</span>', 'Paste an Instagram Reel link — the audio is saved as .mp3 / .m4a / .wav. YouTube and Facebook audio isn\'t available right now.']
@@ -1377,7 +1321,7 @@
     // the dashboard is Quick Actions + history + stats only. The card
     // (URL box, Fetch button, DP/Bio helper) shows on every tool page.
     if (el.fetchCard) el.fetchCard.style.display = page === 'dashboard' ? 'none' : '';
-    if (el.qualityRow) el.qualityRow.style.display = 'none'; // renderPreview shows it again for YT/FB
+    if (el.resultCard) el.resultCard.classList.remove('show'); // a new tool starts with no result shown
     if (page !== 'converter') hideConvertProgress();
     if (el.converterCard) el.converterCard.style.display = page === 'converter' ? '' : 'none';
     if (page === 'dashboard') renderStats();

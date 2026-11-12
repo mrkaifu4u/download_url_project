@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Video Downloader — Insta · YouTube · Facebook</title>
-<meta name="description" content="Paste a video URL, preview it, pick a quality and download. Instagram Reels & Stories, Facebook video, YouTube Shorts & full videos, and video-to-song.">
+<meta name="description" content="Paste a video URL, pick a quality and download. Instagram Reels & Stories, Facebook video, YouTube Shorts & full videos, and video-to-song.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112-11">
+<link rel="stylesheet" href="style.css?v=20261112-12">
 <!-- Import map for the converter's ffmpeg.wasm (ESM build, loaded on demand by app.js).
      The UMD build cannot work here: its worker chunk is a cross-origin classic Worker
      (blocked) and @ffmpeg/util's UMD file is a CommonJS file that never defines its
@@ -55,7 +55,7 @@
       </div>
       <div class="page-head">
         <h1 class="page-title" id="pageTitle">Dash<span>board</span></h1>
-        <p class="page-sub" id="pageSub">Paste a video link, preview it, pick a quality and download — straight to your PC or phone.</p>
+        <p class="page-sub" id="pageSub">Paste a video link, pick a quality and download — straight to your PC or phone.</p>
       </div>
       <div class="spacer"></div>
       <div class="topbar-icons">
@@ -120,18 +120,12 @@
     <!-- ===== Fetch card ===== -->
     <section class="card fetch-card" id="fetchCard">
       <h2><span class="dot">●</span> <span id="fetchTitle">Download a Video</span></h2>
-      <p class="hint" id="fetchHint">Paste a video link, preview it, and download in your preferred quality.</p>
+      <p class="hint" id="fetchHint">Paste a video link and download in your preferred quality.</p>
 
       <div class="url-row">
         <span class="url-ico">🔗</span>
         <input type="url" id="urlInput" placeholder="https://www.instagram.com/reel/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…" autocomplete="off" spellcheck="false">
         <button class="btn" id="fetchBtn">▶ Get Video</button>
-      </div>
-
-      <div class="quality-row" id="qualityRow" style="display:none;">
-        <label for="qualitySelect">Video quality</label>
-        <select id="qualitySelect" aria-label="Video quality"></select>
-        <span class="note">Mirrors the quality pills below the preview.</span>
       </div>
 
 
@@ -228,34 +222,26 @@
       <p class="hint" style="margin-top:12px;">How it works: your video stays on your device — the audio is prepared here and saved in the format and quality you pick. MP3/M4A are saved at your chosen bitrate, WAV is real lossless audio.</p>
     </section>
 
-    <!-- ===== Preview ===== -->
-    <section class="card preview" id="previewCard">
-      <h2><span class="dot">●</span> Preview</h2>
-      <p class="hint">Check the video on screen first, then pick a quality and download.</p>
-      <div class="preview-grid">
-        <div class="preview-media">
-          <video id="previewVideo" controls playsinline preload="metadata" poster=""></video>
-          <img id="previewImage" alt="Video thumbnail" style="display:none;">
-          <span class="dur" id="previewDuration" style="display:none;"></span>
-        </div>
-        <div class="preview-meta">
-          <h3 id="previewTitle">Untitled video</h3>
-          <p class="author" id="previewAuthor"></p>
-          <p class="caption" id="previewCaption" style="display:none;"></p>
-          <p class="quality-label">Choose quality</p>
-          <div class="qualities" id="qualityList"></div>
-          <div class="preview-actions">
-            <button class="btn" id="downloadBtn">⬇ Download</button>
-            <button class="btn ghost small" id="copyCaptionBtn">Copy caption</button>
-            <button class="btn ghost small" id="copyLinkBtn">Copy video link</button>
-          </div>
-          <div class="progress" id="progress">
-            <div class="bar"><i id="progressBar"></i></div>
-            <p id="progressText">Preparing download…</p>
-          </div>
-          <p class="hint" id="downloadNote" style="margin-top:12px;"></p>
-        </div>
+    <!-- ===== Download (shown after a fetch — no video preview) ===== -->
+    <section class="card result" id="resultCard">
+      <h2><span class="dot">●</span> Download</h2>
+      <p class="hint" id="resultTitle">Untitled video</p>
+      <p class="caption" id="resultCaption" style="display:none;"></p>
+      <img id="resultImage" alt="Download image" style="display:none;">
+      <div class="quality-row" id="qualityRow">
+        <label for="qualitySelect">Choose quality</label>
+        <select id="qualitySelect" aria-label="Choose quality"></select>
       </div>
+      <div class="result-actions">
+        <button class="btn" id="downloadBtn">⬇ Download</button>
+        <button class="btn ghost small" id="copyCaptionBtn">Copy caption</button>
+        <button class="btn ghost small" id="copyLinkBtn">Copy video link</button>
+      </div>
+      <div class="progress" id="progress">
+        <div class="bar"><i id="progressBar"></i></div>
+        <p id="progressText">Preparing download…</p>
+      </div>
+      <p class="hint" id="downloadNote" style="margin-top:12px;"></p>
     </section>
 
 
@@ -301,7 +287,7 @@
   </main>
 </div>
 
-<script src="config.js?v=20261112-11"></script>
-<script src="app.js?v=20261112-11"></script>
+<script src="config.js?v=20261112-12"></script>
+<script src="app.js?v=20261112-12"></script>
 </body>
 </html>

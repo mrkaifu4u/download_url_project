@@ -311,3 +311,30 @@ legacy path is now covered by `tests/backend-test.js` (64 checks)
 plus the new `tests/sheet-logging-test.js` (11 checks: admin-URL-only
 regression, both-URLs precedence, no-URL skip with local history
 still saved).
+
+## v12 — no Preview, working quality dropdown, usage fix (2026-11-12)
+
+Four user asks in one release. (1) The Preview section is gone — the
+video player often would not play Instagram files inline anyway. After
+a fetch the compact Download result card shows the title, the caption
+or bio text where relevant, the DP picture for DP downloads, the
+quality dropdown and the Download / Copy buttons. (2) Quality
+selection is now a real dropdown on every video tool (it used to be
+pills plus a select shown only for YouTube/Facebook, which are down —
+so for Instagram there was effectively no working control). The best
+file is first, labelled Original (e.g. "Original — 720p HD · MP4");
+other real formats follow when the API returns them — no invented
+qualities. Picking a quality changes which file downloads (verified:
+picking 480p fetches the 480p file). (3) The Monthly Download Usage
+cards overflowed on desktop too (4th card cut off at ~1080px, same
+nowrap + `1fr` cause as the mobile bug) — desktop grids are now
+`minmax(0, 1fr)` with wrapping usage text. (4) Recent Downloads is
+now explicitly last on the Instagram, YouTube, Facebook and Converter
+pages (per-page flex order; before, tool pages used DOM order and
+Recent sat above the result). Verified: `tests/result-quality-test.js`
+19/19 (IG single Original, YT multi-format download follows the
+pick, DP, Bio), `tests/desktop-v12-test.js` 9/9 in real Chrome
+(usage fits at 1080px + 1280px, result card end-to-end with a mocked
+API, section order), mobile 390px still 14/14, and all older suites
+still pass (backend 64, sheet-logging 11, retry 4, history-filter 11,
+admin-role 24).
