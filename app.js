@@ -1319,7 +1319,7 @@
   const fetchBtnLabel = (t) => FETCH_BTN_LABEL[t] || '▶ Get Video';
 
   const TOOL_TEXT = {
-    dashboard: ['Dash<span>board</span>', 'Kaif ka KAIFFLOW aa gaya! Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
+    dashboard: ['Dash<span>board</span>', 'Welcome to KAIFFLOW! Choose what you want below — Instagram, YouTube, Facebook or Video to Audio — then paste a link and download.'],
     ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link and download it in HD.'],
     ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — get it while it is still live.'],
     ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real profile picture.'],

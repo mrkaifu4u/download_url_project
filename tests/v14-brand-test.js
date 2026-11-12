@@ -39,7 +39,7 @@ function check(name, ok, extra = '') {
     const tagline = await page.$eval('.brand small', el => el.textContent);
     check('sidebar tagline', tagline === 'Download. Convert. Enjoy.', tagline);
     const sub = await page.$eval('#pageSub', el => el.textContent);
-    check('dashboard subtitle has brand intro', sub.startsWith('Kaif ka KAIFFLOW aa gaya!'), sub.slice(0, 40));
+    check('dashboard subtitle is the new English text', sub === 'Welcome to KAIFFLOW! Choose what you want below — Instagram, YouTube, Facebook or Video to Audio — then paste a link and download.', sub.slice(0, 60));
     const btnBg = await page.$eval('#fetchBtn', el => getComputedStyle(el).backgroundImage);
     check('primary button is a gradient', btnBg.includes('linear-gradient'), btnBg.slice(0, 80));
     const btnBgImg = btnBg;
