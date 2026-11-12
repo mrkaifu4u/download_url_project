@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112-7">
+<link rel="stylesheet" href="style.css?v=20261112-8">
 <!-- Import map for the converter's ffmpeg.wasm (ESM build, loaded on demand by app.js).
      The UMD build cannot work here: its worker chunk is a cross-origin classic Worker
      (blocked) and @ffmpeg/util's UMD file is a CommonJS file that never defines its
@@ -154,6 +154,16 @@
         <button class="btn ghost small" id="viewAllBtn">View All →</button>
       </div>
       <p class="hint">Kept in this browser only.</p>
+      <div class="filter-row">
+        <input type="search" id="historySearch" placeholder="Search downloads…" aria-label="Search downloads">
+        <select id="historyPlatform" aria-label="Filter by platform">
+          <option value="">All platforms</option>
+          <option value="instagram">Instagram</option>
+          <option value="youtube">YouTube</option>
+          <option value="facebook">Facebook</option>
+          <option value="local">My File</option>
+        </select>
+      </div>
       <div class="history-list" id="historyList"></div>
       <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn ghost small" id="clearHistoryBtn">Clear history</button>
@@ -291,7 +301,7 @@
   </main>
 </div>
 
-<script src="config.js?v=20261112-7"></script>
-<script src="app.js?v=20261112-7"></script>
+<script src="config.js?v=20261112-8"></script>
+<script src="app.js?v=20261112-8"></script>
 </body>
 </html>

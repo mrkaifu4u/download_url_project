@@ -10,7 +10,24 @@
  *   dl_audit         — Date | Time | Admin | Action | Result | Details
  *   dl_settings      — Key | Value
  *   dl_accounts      — Platform | Name | Status | LastChecked | Note
+ *   dl_lockouts      — Email | Attempts | LastAttempt | LockedUntil
+ *                      (login brute-force protection; NOT in backups)
  *
+ * ROLES (enforced server-side on every action — v2, 2026-11-12):
+ *   super_admin — everything, including creating/deleting users,
+ *                 changing roles, and restore.
+ *   admin       — everything except creating/deleting users, changing
+ *                 roles, and restore. Can block/unblock, reset passwords
+ *                 (except a super_admin's), change settings and back up.
+ *   user        — read-only: stats, logs, audit, user list, tabs,
+ *                 exports, accounts (view). Cannot change anything.
+ * Admin accounts live in TWO tables kept in sync: dl_admin holds the
+ * login credentials (Email | Salt | Hash | Role), dl_users holds the
+ * profile (name, active/blocked, last login). createUser, updateUser,
+ * resetUserPassword and deleteUser update BOTH tables — before v2,
+ * created users could never log in because login only read dl_admin.
+ * Login also refuses blocked/inactive accounts, and locks an email for
+ * 15 minutes after 5 failed attempts.
  * SECURITY — read this before deploying:
  *   - NO passwords are stored in plain text, in this file, or in the repo.
  *     Passwords are hashed with SHA-256 + a per-account random salt
@@ -80,9 +97,27 @@ var SETTINGS_HEADERS = ['Key', 'Value'];
 var ACCOUNTS_SHEET = 'dl_accounts';
 var ACCOUNTS_HEADERS = ['Platform', 'Name', 'Status', 'LastChecked', 'Note'];
 
+var LOCKOUTS_SHEET = 'dl_lockouts';
+var LOCKOUTS_HEADERS = ['Email', 'Attempts', 'LastAttempt', 'LockedUntil'];
+
 var KNOWN_TABS = [LOG_SHEET, USERS_SHEET, ADMIN_SHEET, AUDIT_SHEET, SETTINGS_SHEET, ACCOUNTS_SHEET, SESSIONS_SHEET];
 var SESSION_MS = 30 * 60 * 1000; // 30 minutes, sliding
 var PROVIDERS = ['instagram', 'youtube', 'allinone'];
+
+/* Roles: minimum rank needed per action. 0 = read-only user, 1 = admin,
+   2 = super_admin. Actions not listed here fall through to 'Unknown
+   action' — they are never executed. */
+var ROLE_RANK = { user: 0, viewer: 0, admin: 1, super_admin: 2 };
+var ACTION_ROLES = {
+  validate: 0, logout: 0, changePassword: 0,
+  stats: 0, logs: 0, audit: 0, users: 0, tabs: 0, exportTab: 0,
+  accountsGet: 0, settingsGet: 0,
+  accountsSet: 1, settingsSet: 1, backup: 1,
+  updateUser: 1, resetUserPassword: 1,
+  createUser: 2, deleteUser: 2, restore: 2
+};
+var LOCKOUT_MAX_ATTEMPTS = 5;
+var LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 /* ---------------- sheet helpers ---------------- */
 
@@ -102,6 +137,7 @@ function headersOf_(name) {
   if (name === AUDIT_SHEET) return AUDIT_HEADERS;
   if (name === SETTINGS_SHEET) return SETTINGS_HEADERS;
   if (name === ACCOUNTS_SHEET) return ACCOUNTS_HEADERS;
+  if (name === LOCKOUTS_SHEET) return LOCKOUTS_HEADERS;
   return null;
 }
 
@@ -232,6 +268,65 @@ function issueSession_(email) {
   var now = new Date().getTime();
   getSheet_(SESSIONS_SHEET, SESSIONS_HEADERS).appendRow([sha256Hex_(token), email, now + SESSION_MS, now]);
   return token;
+}
+
+/* Delete every session row for an email (used when an account is deleted
+   or its password is reset, so the old login stops working at once). */
+function deleteSessionsFor_(email) {
+  var rows = readRows_(SESSIONS_SHEET);
+  var toDelete = rows.filter(function (r) { return String(r.Email).toLowerCase() === String(email).toLowerCase(); });
+  // Delete from the bottom up so row numbers stay valid.
+  toDelete.sort(function (a, b) { return b.__row - a.__row; }).forEach(function (r) {
+    try { deleteRowByNumber_(SESSIONS_SHEET, r.__row); } catch (e) {}
+  });
+}
+
+/* ---------------- roles + login lockout (v2) ---------------- */
+
+function roleRank_(role) {
+  return ROLE_RANK[role] != null ? ROLE_RANK[role] : 0;
+}
+
+function requireRole_(auth, minRank) {
+  if (roleRank_(auth.role) < minRank) {
+    return { ok: false, error: 'Your role (' + (auth.role || 'user') + ') does not have permission for this action.' };
+  }
+  return { ok: true };
+}
+
+/* Returns { locked: true, minutesLeft } when the email is locked out.
+   When a lock has expired, the attempt counter is cleared so the next
+   failures start fresh — otherwise one typo after the wait would
+   re-lock the account instantly. */
+function lockoutCheck_(email) {
+  var row = findRow_(LOCKOUTS_SHEET, 'Email', String(email).toLowerCase());
+  if (!row) return { locked: false };
+  var until = Number(row.LockedUntil) || 0;
+  if (until > new Date().getTime()) {
+    return { locked: true, minutesLeft: Math.max(1, Math.ceil((until - new Date().getTime()) / 60000)) };
+  }
+  if (until > 0) { try { deleteRowByNumber_(LOCKOUTS_SHEET, row.__row); } catch (e) {} }
+  return { locked: false };
+}
+
+/* Record a failed login. Returns true when this failure triggers a lock. */
+function lockoutFail_(email) {
+  var em = String(email).toLowerCase();
+  var now = new Date().getTime();
+  var row = findRow_(LOCKOUTS_SHEET, 'Email', em);
+  var attempts = row ? (Number(row.Attempts) || 0) + 1 : 1;
+  var lockedUntil = attempts >= LOCKOUT_MAX_ATTEMPTS ? now + LOCKOUT_MS : 0;
+  if (row) {
+    updateCells_(LOCKOUTS_SHEET, row.__row, { Attempts: attempts, LastAttempt: now, LockedUntil: lockedUntil });
+  } else {
+    getSheet_(LOCKOUTS_SHEET, LOCKOUTS_HEADERS).appendRow([em, attempts, now, lockedUntil]);
+  }
+  return lockedUntil > 0;
+}
+
+function lockoutClear_(email) {
+  var row = findRow_(LOCKOUTS_SHEET, 'Email', String(email).toLowerCase());
+  if (row) { try { deleteRowByNumber_(LOCKOUTS_SHEET, row.__row); } catch (e) {} }
 }
 
 /* ---------------- download log (legacy, unchanged) ---------------- */
@@ -396,11 +491,28 @@ function doPost(e) {
     }
     if (action === 'login') {
       var lemail = String(data.email || '').trim().toLowerCase();
+      var lock = lockoutCheck_(lemail);
+      if (lock.locked) {
+        return json_({ ok: false, error: 'Too many failed login attempts — try again in ' + lock.minutesLeft + ' minute(s).' });
+      }
       var admin = findRow_(ADMIN_SHEET, 'Email', lemail);
       if (!admin || hashPassword_(admin.Salt, String(data.password || '')) !== admin.Hash) {
-        audit_(lemail, 'login', 'failed', 'Invalid credentials');
-        return json_({ ok: false, error: 'Invalid email or password.' });
+        var nowLocked = lockoutFail_(lemail);
+        audit_(lemail, 'login', 'failed', nowLocked ? 'Invalid credentials — account locked for 15 minutes' : 'Invalid credentials');
+        return json_({ ok: false, error: nowLocked ? 'Too many failed login attempts — try again in 15 minutes.' : 'Invalid email or password.' });
       }
+      // A blocked or deactivated account cannot log in, even with the
+      // right password. (No dl_users row = legacy admin: allow login.)
+      var profile = findRow_(USERS_SHEET, 'Email', lemail);
+      if (profile && String(profile.Blocked) === 'true') {
+        audit_(lemail, 'login', 'failed', 'Account is blocked');
+        return json_({ ok: false, error: 'This account is blocked. Contact the super admin.' });
+      }
+      if (profile && String(profile.Active) === 'false') {
+        audit_(lemail, 'login', 'failed', 'Account is inactive');
+        return json_({ ok: false, error: 'This account is deactivated. Contact the super admin.' });
+      }
+      lockoutClear_(lemail);
       var token = issueSession_(lemail);
       updateCells_(ADMIN_SHEET, admin.__row, { LastLogin: n.date + ' ' + n.time });
       var urow = findRow_(USERS_SHEET, 'Email', lemail);
@@ -413,6 +525,13 @@ function doPost(e) {
     var auth = requireAuth_(data);
     if (!auth.ok) return json_(auth);
     var who = auth.email;
+
+    /* ----- role gate: every known action needs its minimum role ----- */
+    var minRank = ACTION_ROLES[action];
+    if (minRank != null) {
+      var rg = requireRole_(auth, minRank);
+      if (!rg.ok) return json_(rg);
+    }
 
     if (action === 'validate') {
       return json_({ ok: true, valid: true, email: who, role: auth.role, mustChange: auth.mustChange });
@@ -448,32 +567,74 @@ function doPost(e) {
       var cemail = String(data.email || '').trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cemail)) return json_({ ok: false, error: 'Enter a valid email address.' });
       if (findRow_(USERS_SHEET, 'Email', cemail)) return json_({ ok: false, error: 'A user with this email already exists.' });
+      if (findRow_(ADMIN_SHEET, 'Email', cemail)) return json_({ ok: false, error: 'A login already exists for this email.' });
       if (String(data.password || '').length < 8) return json_({ ok: false, error: 'Password must be at least 8 characters.' });
+      var crole = String(data.role || 'user');
+      if (ROLE_RANK[crole] == null) crole = 'user';
       var csalt = newSalt_();
       var cid = Utilities.getUuid();
-      getSheet_(USERS_SHEET, USERS_HEADERS).appendRow([cid, String(data.name || cemail.split('@')[0]), cemail, String(data.role || 'user'), 'true', 'false', n.date + ' ' + n.time, '', 0, '', csalt, hashPassword_(csalt, String(data.password))]);
-      audit_(who, 'create_user', 'ok', cemail + ' (' + String(data.role || 'user') + ')');
+      var chash = hashPassword_(csalt, String(data.password));
+      getSheet_(USERS_SHEET, USERS_HEADERS).appendRow([cid, String(data.name || cemail.split('@')[0]), cemail, crole, 'true', 'false', n.date + ' ' + n.time, '', 0, '', csalt, chash]);
+      // The login credentials MUST live in dl_admin too — login only
+      // reads dl_admin. Without this row the new user can never log in.
+      // MustChange forces them to pick their own password at first login.
+      getSheet_(ADMIN_SHEET, ADMIN_HEADERS).appendRow([cemail, csalt, chash, crole, 'true', n.date + ' ' + n.time, '']);
+      audit_(who, 'create_user', 'ok', cemail + ' (' + crole + ')');
       return json_({ ok: true, id: cid });
     }
     if (action === 'updateUser') {
       var uu = findRow_(USERS_SHEET, 'ID', String(data.id || ''));
       if (!uu) return json_({ ok: false, error: 'User not found.' });
+      var isSuper = roleRank_(auth.role) >= 2;
+      // Only a super_admin may touch another super_admin's account.
+      if (String(uu.Role) === 'super_admin' && !isSuper) {
+        return json_({ ok: false, error: 'Only a super admin can change a super admin account.' });
+      }
+      // Nobody may block, deactivate or demote their own account.
+      var selfTarget = String(uu.Email).toLowerCase() === who;
+      if (selfTarget && (data.blocked === true || data.active === false)) {
+        return json_({ ok: false, error: 'You cannot block or deactivate your own account.' });
+      }
       var patch = {};
       if (data.name != null) patch.Name = String(data.name);
       if (data.email != null) patch.Email = String(data.email).trim().toLowerCase();
-      if (data.role != null) patch.Role = String(data.role);
+      if (data.role != null) {
+        var newRole = String(data.role);
+        if (ROLE_RANK[newRole] == null) return json_({ ok: false, error: 'Unknown role: ' + newRole });
+        if (newRole !== String(uu.Role)) {
+          if (!isSuper) return json_({ ok: false, error: 'Only a super admin can change roles.' });
+          if (selfTarget) return json_({ ok: false, error: 'You cannot change your own role.' });
+        }
+        patch.Role = newRole;
+      }
       if (data.active != null) patch.Active = data.active ? 'true' : 'false';
       if (data.blocked != null) patch.Blocked = data.blocked ? 'true' : 'false';
       updateCells_(USERS_SHEET, uu.__row, patch);
+      // Keep the login row in sync (role + email are read at login).
+      var arow = findRow_(ADMIN_SHEET, 'Email', String(uu.Email));
+      if (arow) {
+        var apatch = {};
+        if (patch.Role) apatch.Role = patch.Role;
+        if (patch.Email) apatch.Email = patch.Email;
+        if (Object.keys(apatch).length) updateCells_(ADMIN_SHEET, arow.__row, apatch);
+      }
       audit_(who, 'update_user', 'ok', uu.Email + ' -> ' + JSON.stringify(patch));
       return json_({ ok: true });
     }
     if (action === 'resetUserPassword') {
       var ru = findRow_(USERS_SHEET, 'ID', String(data.id || ''));
       if (!ru) return json_({ ok: false, error: 'User not found.' });
+      if (String(ru.Role) === 'super_admin' && roleRank_(auth.role) < 2) {
+        return json_({ ok: false, error: 'Only a super admin can reset a super admin password.' });
+      }
       if (String(data.password || '').length < 8) return json_({ ok: false, error: 'Password must be at least 8 characters.' });
       var rsalt = newSalt_();
-      updateCells_(USERS_SHEET, ru.__row, { Salt: rsalt, Hash: hashPassword_(rsalt, String(data.password)) });
+      var rhash = hashPassword_(rsalt, String(data.password));
+      updateCells_(USERS_SHEET, ru.__row, { Salt: rsalt, Hash: rhash });
+      // Login reads dl_admin — update it too, or the reset changes nothing.
+      var ra = findRow_(ADMIN_SHEET, 'Email', String(ru.Email));
+      if (ra) updateCells_(ADMIN_SHEET, ra.__row, { Salt: rsalt, Hash: rhash, MustChange: 'true' });
+      deleteSessionsFor_(ru.Email); // force re-login with the new password
       audit_(who, 'reset_user_password', 'ok', ru.Email);
       return json_({ ok: true });
     }
@@ -482,6 +643,9 @@ function doPost(e) {
       if (!du) return json_({ ok: false, error: 'User not found.' });
       if (String(du.Email).toLowerCase() === who) return json_({ ok: false, error: 'You cannot delete your own admin account.' });
       deleteRowByNumber_(USERS_SHEET, du.__row);
+      var da = findRow_(ADMIN_SHEET, 'Email', String(du.Email));
+      if (da) deleteRowByNumber_(ADMIN_SHEET, da.__row);
+      deleteSessionsFor_(du.Email);
       audit_(who, 'delete_user', 'ok', du.Email);
       return json_({ ok: true });
     }
@@ -530,6 +694,44 @@ function doPost(e) {
       settingsSet_('lastBackup', stamp);
       audit_(who, 'backup', 'ok', 'Snapshot of ' + KNOWN_TABS.length + ' tabs, ' + stats_().totalRows + ' rows');
       return json_({ ok: true, backup: snap, exportedAt: stamp });
+    }
+    if (action === 'restore') {
+      // Restore a backup file produced by the 'backup' action:
+      // { tabName: csvText, ... }. Super_admin only. Every tab is
+      // validated BEFORE anything is written — a bad file changes nothing.
+      if (data.confirm !== true) return json_({ ok: false, error: 'Restore needs confirmation.' });
+      var snap = data.backup;
+      if (!snap || typeof snap !== 'object') return json_({ ok: false, error: 'Invalid backup file.' });
+      var names = Object.keys(snap);
+      if (!names.length) return json_({ ok: false, error: 'Backup file is empty.' });
+      var parsed = {};
+      for (var ri = 0; ri < names.length; ri++) {
+        var tname = names[ri];
+        if (tname === SESSIONS_SHEET) continue; // live sessions are never restored
+        var headers = headersOf_(tname);
+        if (!headers) return json_({ ok: false, error: 'Unknown tab in backup: ' + tname + ' — restore stopped, nothing was changed.' });
+        var rows;
+        try { rows = Utilities.parseCsv(String(snap[tname] || '')); } catch (e) {
+          return json_({ ok: false, error: 'Could not read the data for tab ' + tname + ' — restore stopped, nothing was changed.' });
+        }
+        if (!rows.length) return json_({ ok: false, error: 'Tab ' + tname + ' has no header row — restore stopped, nothing was changed.' });
+        var hdr = rows[0].map(function (h) { return String(h).trim(); });
+        if (hdr.join('|') !== headers.join('|')) {
+          return json_({ ok: false, error: 'Tab ' + tname + ' columns do not match the current layout — restore stopped, nothing was changed.' });
+        }
+        parsed[tname] = rows.slice(1);
+      }
+      if (!Object.keys(parsed).length) return json_({ ok: false, error: 'Nothing to restore (only sessions were in the file).' });
+      var restored = {};
+      Object.keys(parsed).forEach(function (tn) {
+        var sh = getSheet_(tn, headersOf_(tn));
+        sh.clearContents();
+        var all = [headersOf_(tn)].concat(parsed[tn]);
+        sh.getRange(1, 1, all.length, headersOf_(tn).length).setValues(all);
+        restored[tn] = parsed[tn].length;
+      });
+      audit_(who, 'restore', 'ok', 'Restored ' + Object.keys(restored).map(function (t) { return t + ' (' + restored[t] + ' rows)'; }).join(', '));
+      return json_({ ok: true, restored: restored });
     }
     if (action === 'accountsGet') {
       var accs = readRows_(ACCOUNTS_SHEET);

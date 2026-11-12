@@ -273,7 +273,7 @@
     <section class="admin-section" id="section-users" style="display:none;">
       <div class="card">
         <h2><span class="dot">●</span> Users &amp; Access</h2>
-        <p class="hint">Registered app users from the backend. There are no registered app users yet unless the backend returns some — this list is never filled with invented users.</p>
+        <p class="hint">Admin accounts that can log in to this panel. The public app has no user accounts — downloads need no login — so this list is never filled with app visitors. Roles: Super Admin (everything), Admin (manage, but cannot create/delete users or change roles), User (read-only).</p>
         <div class="filter-row">
           <input type="search" id="userSearch" placeholder="Search by name or email…" aria-label="Search users">
           <select id="userRoleFilter" aria-label="Filter by role">
@@ -291,9 +291,9 @@
         <div class="table-wrap"><table class="history-table" id="usersTable"></table></div>
         <p class="empty" id="usersEmpty" style="display:none;">No users yet.</p>
       </div>
-      <div class="card">
+      <div class="card" id="createUserCard">
         <h2><span class="dot">●</span> Create user</h2>
-        <p class="hint">New users are created through the backend. Existing passwords are never displayed.</p>
+        <p class="hint">New users are created through the backend and can log in to this panel straight away. They must pick their own password at first login. Existing passwords are never displayed.</p>
         <div class="status err" id="userFormError" style="display:none;"></div>
         <div class="status ok" id="userFormOk" style="display:none;"></div>
         <form id="createUserForm" autocomplete="off">
@@ -317,6 +317,17 @@
         <div id="apiRows"></div>
         <p class="hint">Failed requests: <b id="apiFailedCount">0</b> — failed fetches are not stored in v1, so this is 0 unless the backend reports some.</p>
         <div class="status ok" id="apiMsg" style="display:none;"></div>
+      </div>
+      <div class="card">
+        <h2><span class="dot">●</span> API keys (this browser only)</h2>
+        <p class="hint">Set a different RapidAPI or Scrappa key to use on this browser instead of the built-in ones — for example after rotating a key. Leave a field empty to keep its current key. Clearing removes the override and the built-in key is used again. This only affects this browser; other visitors still use the built-in keys.</p>
+        <div class="field"><label for="overrideRapidKey">RapidAPI key — current: <b id="rapidKeyState">Using the built-in key</b></label><input type="password" id="overrideRapidKey" autocomplete="off" placeholder="Paste a new RapidAPI key"></div>
+        <div class="field"><label for="overrideScrappaKey">Scrappa key — current: <b id="scrappaKeyState">Using the built-in key</b></label><input type="password" id="overrideScrappaKey" autocomplete="off" placeholder="Paste a new Scrappa key"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn small" id="keySaveBtn">Save keys</button>
+          <button class="btn ghost small" id="keyClearBtn">Clear overrides</button>
+        </div>
+        <div class="status ok" id="keyMsg" style="display:none;"></div>
       </div>
     </section>
 
@@ -412,7 +423,8 @@
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn ghost small" id="dbExportBtn" disabled>Export this tab (CSV)</button>
             <button class="btn ghost small" id="dbBackupBtn">Backup (JSON snapshot)</button>
-            <button class="btn ghost small" id="dbRestoreBtn" disabled title="Restore is not available in v1">Restore is not available in v1 — restore by re-importing the CSV in the Sheet</button>
+            <button class="btn ghost small" id="dbRestoreBtn" title="Restore a backup JSON file (super admin only)">Restore from backup…</button>
+            <input type="file" id="dbRestoreFile" accept=".json,application/json" hidden>
           </div>
         </div>
         <div class="filter-row">

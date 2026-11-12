@@ -288,12 +288,26 @@
     if (page === 'converter') return h.filter(i => i.tool === 'to_song');
     return h.filter(i => i.platform === page && i.tool !== 'to_song');
   }
+  /* Search + platform filter on top of the per-page filter. Export uses
+     the same filtered view, so what you see is what you download. */
+  let historySearch = '', historyPlatform = '';
+  function filteredHistory() {
+    let h = historyForPage();
+    if (historyPlatform) h = h.filter(i => i.platform === historyPlatform);
+    if (historySearch) {
+      const q = historySearch.toLowerCase();
+      h = h.filter(i => ((i.video_url || '') + ' ' + (TOOL_LABELS[i.tool] || '') + ' ' + (PLATFORM_LABELS[i.platform] || '') + ' ' + (i.format || '') + ' ' + (i.city || '') + ' ' + (i.date || '')).toLowerCase().includes(q));
+    }
+    return h;
+  }
   function renderHistory() {
-    const h = historyForPage();
     const page = PAGE_FOR_TOOL[currentTool] || 'dashboard';
+    const h = filteredHistory();
     if (el.historyTitle) el.historyTitle.textContent = page === 'dashboard' ? 'Recent Downloads' : 'Recent Downloads — ' + (HISTORY_PAGE_LABEL[page] || 'Downloads');
     if (!h.length) {
-      const msg = page === 'dashboard'
+      const msg = historyForPage().length
+        ? 'No downloads match that search or filter — try clearing them.'
+        : page === 'dashboard'
         ? 'No downloads yet — pick a tool from Quick Actions and download a video.'
         : page === 'converter'
         ? 'No conversions yet — convert a video and it will appear here.'
@@ -348,23 +362,33 @@
     return (mobile ? 'Mobile' : 'Desktop') + ' · ' + os + ' · ' + window.innerWidth + 'x' + window.innerHeight;
   }
   function getLocation() {
-    // GPS first; fall back to IP geolocation (ipapi.co) — same approach as
-    // the portfolio (IP alone once showed the wrong town).
+    // Location ONLY with the user's permission: ask for GPS. If the user
+    // says no, GPS is unavailable, or the prompt times out, the location
+    // is recorded as "Location not shared" — there is deliberately NO
+    // IP-address fallback (an IP lookup would locate the user without
+    // asking). GPS coordinates are reverse-geocoded to a city name with
+    // a free no-key service; the coordinates themselves are only ever
+    // sent to the owner's own Sheet log, never to any other party.
     return new Promise(resolve => {
-      const done = (loc) => resolve(loc);
-      const fallback = () => {
-        fetch('https://ipapi.co/json/').then(r => r.json()).then(j => done({
-          city: [j.city, j.region, j.country_name].filter(Boolean).join(', ') || 'Unknown',
-          lat: j.latitude, lng: j.longitude, source: 'IP'
-        })).catch(() => done({ city: 'Unknown', lat: '', lng: '', source: 'none' }));
-      };
-      if (!navigator.geolocation) return fallback();
+      const none = () => resolve({ city: 'Location not shared', lat: '', lng: '', source: 'none' });
+      if (!navigator.geolocation) return none();
+      let settled = false;
+      const timer = setTimeout(() => { if (!settled) { settled = true; none(); } }, 7000);
       navigator.geolocation.getCurrentPosition(
-        pos => done({ city: 'GPS location', lat: pos.coords.latitude, lng: pos.coords.longitude, source: 'GPS' }),
-        () => fallback(),
+        pos => {
+          if (settled) return; settled = true; clearTimeout(timer);
+          const lat = pos.coords.latitude, lng = pos.coords.longitude;
+          const geo = fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lng + '&localityLanguage=en')
+            .then(r => r.json()).catch(() => null);
+          const timeout = new Promise(r => setTimeout(() => r(null), 3000));
+          Promise.race([geo, timeout]).then(j => resolve({
+            city: (j && [j.city, j.principalSubdivision, j.countryName].filter(Boolean).join(', ')) || 'GPS location',
+            lat, lng, source: 'GPS'
+          }));
+        },
+        () => { if (settled) return; settled = true; clearTimeout(timer); none(); },
         { timeout: 6000, maximumAge: 60000 }
       );
-      setTimeout(fallback, 7000); // never block the log on a GPS prompt
     });
   }
 
@@ -1445,8 +1469,10 @@
     handleFetch();
   });
   $('clearHistoryBtn').addEventListener('click', () => { localStorage.removeItem(STORE.history); renderHistory(); });
+  $('historySearch').addEventListener('input', (e) => { historySearch = e.target.value.trim(); renderHistory(); });
+  $('historyPlatform').addEventListener('change', (e) => { historyPlatform = e.target.value; renderHistory(); });
   $('exportHistoryBtn').addEventListener('click', () => {
-    const h = loadHistory();
+    const h = filteredHistory(); // exports exactly what the table shows
     const csv = 'Date,Time,Device,Platform,Tool,Video URL,Quality,City,Latitude,Longitude,Maps Link\n' +
       h.map(r => [r.date, r.time, '"' + (r.device || '').replace(/"/g, '""') + '"', r.platform, r.tool, r.video_url, r.quality, '"' + (r.city || '').replace(/"/g, '""') + '"', r.lat, r.lng, r.mapsLink].join(',')).join('\n');
     const a = document.createElement('a');

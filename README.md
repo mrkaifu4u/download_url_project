@@ -222,3 +222,46 @@ is labelled per section (Get Reel / Get Story / Get DP / Get Caption /
 Get Bio / Get Short / Get Audio). Downloads retry once, and if the
 browser cannot reach the video server the app says so plainly instead
 of implying the download worked.
+
+## v8 — admin security fixes + history search (2026-11-12)
+
+Backend (`apps-script/Code.gs` v2 — **re-paste into Apps Script and
+redeploy the web app for these to take effect**):
+- **Roles are enforced server-side.** super_admin: everything.
+  admin: everything except creating/deleting users, changing roles,
+  and restore. user: read-only (stats, logs, audit, user list, tabs,
+  exports, accounts view). Only a super_admin may touch another
+  super_admin's account; nobody may block/deactivate/demote themself.
+- **Created users can log in.** Before v2, `createUser` wrote only to
+  `dl_users` while login only read `dl_admin`, so created accounts
+  could never log in — and password resets changed nothing for the
+  same reason. Both tables are now kept in sync by create/update/
+  reset/delete, and a password reset kills the user's sessions.
+- **Blocked/inactive accounts cannot log in**, even with the right
+  password. **Login lockout:** 5 failed attempts lock an email for
+  15 minutes (`dl_lockouts` tab, not in backups); the counter resets
+  once the lock expires.
+- **Restore** (`restore` action, super_admin only): uploads a backup
+  JSON file, validates every tab's headers BEFORE writing anything,
+  then rewrites the tabs. Live sessions are never restored.
+
+Admin panel (`admin.html`/`admin.js`): the UI hides/disables what the
+logged-in role cannot do (create-user card, delete buttons, role
+picker, settings save, backup/restore, API key/limit controls). The
+Database section has a working **Restore from backup…** button, and
+API Management has **API key overrides** (RapidAPI + Scrappa) saved
+to this browser's `vd_settings` — same-browser only, like limits.
+
+User app (`app.js`/`index.html`): history has **search + platform
+filter**; CSV export exports exactly the filtered view. **Location is
+permission-only now:** GPS is requested, and if the user says no (or
+GPS is unavailable) the log says "Location not shared" — the old
+ipapi.co IP fallback is removed. GPS coordinates are reverse-geocoded
+to a city name (BigDataCloud, no key) and sent only to the owner's
+own Sheet log.
+
+Tests (`tests/`, run with `node tests/<file>.js` from `~/workspace`):
+`backend-test.js` runs the real Code.gs against a fake spreadsheet
+(58 checks: RBAC, login, lockout, restore); `admin-role-test.js`
+checks the role UI in jsdom (24 checks); `history-filter-test.js`
+checks search/filter/export (11 checks).

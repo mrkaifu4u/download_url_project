@@ -326,8 +326,26 @@
     startSessionTimers();
     const id = $('adminIdentity');
     if (id) id.innerHTML = '<b>' + esc(adminEmail || 'Admin') + '</b><span>' + esc(adminRole || 'admin') + '</span>';
+    applyRoleUi();
     showView('app');
     showSection('dashboard');
+  }
+
+  /* ---------- roles (the backend enforces the real rules — this only
+     keeps the UI honest so nobody clicks a button that will fail) ---------- */
+  function roleRank() { const r = adminRole || 'user'; return r === 'super_admin' ? 2 : r === 'admin' ? 1 : 0; }
+  function canWrite() { return roleRank() >= 1; }
+  function isSuper() { return roleRank() >= 2; }
+  function applyRoleUi() {
+    const w = canWrite(), s = isSuper();
+    const createCard = $('createUserCard'); if (createCard) createCard.style.display = s ? '' : 'none';
+    const setBtn = document.querySelector('#appSettingsForm button[type="submit"]');
+    if (setBtn) { setBtn.disabled = !w; setBtn.title = w ? '' : 'Your role is read-only.'; }
+    const bk = $('dbBackupBtn'); if (bk) { bk.disabled = !w; bk.title = w ? '' : 'Your role is read-only.'; }
+    const rs = $('dbRestoreBtn'); if (rs) { rs.disabled = !s; rs.title = s ? '' : 'Only a super admin can restore a backup.'; }
+    const ra = $('restoreAccountsBtn'); if (ra) { ra.disabled = !w; ra.title = w ? '' : 'Your role is read-only.'; }
+    ['keySaveBtn', 'keyClearBtn'].forEach((id) => { const b = $(id); if (b) { b.disabled = !w; b.title = w ? '' : 'Your role is read-only.'; } });
+    ['overrideRapidKey', 'overrideScrappaKey'].forEach((id) => { const b = $(id); if (b) b.disabled = !w; });
   }
 
   /* ---------- navigation ---------- */
@@ -584,9 +602,18 @@
     });
     show($('usersEmpty'), rows.length === 0);
     const table = $('usersTable');
+    const w = canWrite(), s = isSuper();
     table.innerHTML = '<thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Registered</th><th>Last login</th><th>Downloads</th><th>Device</th><th>Actions</th></tr></thead><tbody>' +
       rows.map((u) => {
         const statusBadge = u.blocked ? '<span class="badge red">Blocked</span>' : u.active ? '<span class="badge green">Active</span>' : '<span class="badge grey">Inactive</span>';
+        const acts = [];
+        if (w) {
+          acts.push('<button class="btn ghost" data-act="edit" data-id="' + esc(u.id) + '">Edit</button>');
+          acts.push('<button class="btn ghost" data-act="toggle-active" data-id="' + esc(u.id) + '">' + (u.active ? 'Deactivate' : 'Activate') + '</button>');
+          acts.push('<button class="btn ghost" data-act="toggle-block" data-id="' + esc(u.id) + '">' + (u.blocked ? 'Unblock' : 'Block') + '</button>');
+          acts.push('<button class="btn ghost" data-act="reset-pw" data-id="' + esc(u.id) + '">Reset password</button>');
+        }
+        if (s) acts.push('<button class="btn ghost" data-act="delete" data-id="' + esc(u.id) + '">Delete</button>');
         return '<tr><td data-label="Name">' + esc(u.name || '—') + '</td>' +
           '<td data-label="Email">' + esc(u.email || '—') + '</td>' +
           '<td data-label="Role">' + esc(u.role || 'user') + '</td>' +
@@ -595,27 +622,28 @@
           '<td data-label="Last login">' + esc(u.lastLogin || 'Never') + '</td>' +
           '<td data-label="Downloads">' + fmt(u.downloads) + '</td>' +
           '<td data-label="Device">' + esc(u.device || '—') + '</td>' +
-          '<td data-label="Actions"><div class="row-actions">' +
-          '<button class="btn ghost" data-act="edit" data-id="' + esc(u.id) + '">Edit</button>' +
-          '<button class="btn ghost" data-act="toggle-active" data-id="' + esc(u.id) + '">' + (u.active ? 'Deactivate' : 'Activate') + '</button>' +
-          '<button class="btn ghost" data-act="toggle-block" data-id="' + esc(u.id) + '">' + (u.blocked ? 'Unblock' : 'Block') + '</button>' +
-          '<button class="btn ghost" data-act="reset-pw" data-id="' + esc(u.id) + '">Reset password</button>' +
-          '<button class="btn ghost" data-act="delete" data-id="' + esc(u.id) + '">Delete</button>' +
-          '</div></td></tr>';
+          '<td data-label="Actions">' + (acts.length ? '<div class="row-actions">' + acts.join('') + '</div>' : '<span class="muted-pill">View only</span>') + '</td></tr>';
       }).join('') + '</tbody>';
     $$('button[data-act]', table).forEach((b) => b.addEventListener('click', () => userAction(b.dataset.act, b.dataset.id)));
   }
   async function userAction(act, id) {
     const u = allUsers.find((x) => String(x.id) === String(id));
     if (!u) return;
+    if (u.role === 'super_admin' && !isSuper()) { appError('Only a super admin can change a super admin account.'); return; }
     try {
       if (act === 'edit') {
+        // Only a super admin may change roles — and the role list must
+        // include super_admin, or editing one would silently demote them.
+        const roleField = isSuper()
+          ? '<div class="field"><label for="mRole">Role</label><select id="mRole"><option value="user"' + (u.role === 'user' ? ' selected' : '') + '>User (read-only)</option><option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>Admin</option><option value="super_admin"' + (u.role === 'super_admin' ? ' selected' : '') + '>Super Admin</option></select></div>'
+          : '';
         openModal('Edit user', '' +
           '<div class="field"><label for="mName">Name</label><input type="text" id="mName" value="' + esc(u.name || '') + '"></div>' +
           '<div class="field"><label for="mEmail">Email</label><input type="email" id="mEmail" value="' + esc(u.email || '') + '"></div>' +
-          '<div class="field"><label for="mRole">Role</label><select id="mRole"><option value="user"' + (u.role === 'user' ? ' selected' : '') + '>User</option><option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>Admin</option></select></div>',
+          roleField,
           async () => {
-            const r = await apiCall('updateUser', { id: u.id, name: $('mName').value.trim(), email: $('mEmail').value.trim(), role: $('mRole').value, active: u.active, blocked: u.blocked }, true);
+            const roleEl = $('mRole');
+            const r = await apiCall('updateUser', { id: u.id, name: $('mName').value.trim(), email: $('mEmail').value.trim(), role: roleEl ? roleEl.value : u.role, active: u.active, blocked: u.blocked }, true);
             if (!r || !r.ok) throw new Error((r && r.error) || 'Update failed.');
             loadUsers();
           });
@@ -678,6 +706,7 @@
   function openModal(title, bodyHtml, onSave) {
     $('modalTitle').textContent = title;
     $('modalBody').innerHTML = bodyHtml;
+    $('modalSave').textContent = 'Save';
     showStatus($('modalError'), '');
     modalSaveFn = onSave;
     $('modalSave').style.display = onSave ? '' : 'none';
@@ -724,14 +753,14 @@
       return '<div class="api-row" data-api="' + esc(key) + '">' +
         '<div class="api-head"><div><h3>' + esc(API_LABELS[key] || key) + '</h3><p class="host">' + esc(host) + '</p></div>' +
         '<span class="badge ' + (isDisabled ? 'red' : 'green') + '">' + (isDisabled ? 'Disabled' : 'Enabled') + '</span></div>' +
-        '<p class="hint">Key: <b>' + esc(masked) + '</b> — the built-in key is public in the repo by the owner\'s choice; a key typed in the main app Settings overrides it.</p>' +
+        '<p class="hint">Key: <b>' + esc(masked) + '</b> — the built-in key is public in the repo by the owner\'s choice; a key set in API keys below overrides it on this browser.</p>' +
         '<div class="api-meta"><span>Used this month: <b>' + fmt(used) + '</b></span><span>Limit: <b>' + fmt(limit) + '</b></span><span>Left: <b>' + fmt(left) + '</b></span><span>Connection: <b class="conn-status">Not tested</b></span></div>' +
-        '<div class="field"><label>Monthly limit</label><input type="number" min="0" step="1" class="api-limit" data-api="' + esc(key) + '" value="' + limit + '"></div>' +
+        '<div class="field"><label>Monthly limit</label><input type="number" min="0" step="1" class="api-limit" data-api="' + esc(key) + '" value="' + limit + '"' + (canWrite() ? '' : ' disabled') + '></div>' +
         '<div class="api-actions">' +
-        '<button class="btn ghost small" data-test="' + esc(key) + '">Test connection</button>' +
+        '<button class="btn ghost small" data-test="' + esc(key) + '"' + (canWrite() ? '' : ' disabled title="Your role is read-only."') + '>Test connection</button>' +
         '<span class="test-note">Test uses 1 API call.</span>' +
-        '<button class="btn ghost small" data-toggle-api="' + esc(key) + '">' + (isDisabled ? 'Enable' : 'Disable') + '</button>' +
-        '<button class="btn ghost small" data-save-limit="' + esc(key) + '">Save limit</button>' +
+        '<button class="btn ghost small" data-toggle-api="' + esc(key) + '"' + (canWrite() ? '' : ' disabled title="Your role is read-only."') + '>' + (isDisabled ? 'Enable' : 'Disable') + '</button>' +
+        '<button class="btn ghost small" data-save-limit="' + esc(key) + '"' + (canWrite() ? '' : ' disabled title="Your role is read-only."') + '>Save limit</button>' +
         '</div><p class="test-result" data-result="' + esc(key) + '"></p></div>';
     }).join('');
     // Restore last test results.
@@ -745,6 +774,7 @@
     $$('[data-test]', wrap).forEach((b) => b.addEventListener('click', () => testApi(b.dataset.test)));
     $$('[data-toggle-api]', wrap).forEach((b) => b.addEventListener('click', () => toggleApiHost(b.dataset.toggleApi)));
     $$('[data-save-limit]', wrap).forEach((b) => b.addEventListener('click', () => saveApiLimit(b.dataset.saveLimit)));
+    loadKeyOverrides();
   }
   async function testApi(key) {
     const host = (CFG.API_HOSTS || {})[key];
@@ -852,14 +882,15 @@
         '<p>Status: ' + esc(a.status || 'Not connected — downloads use RapidAPI, no account login') + '</p>' +
         '<p>Account: ' + esc(a.name || '—') + ' · Last checked: ' + esc(a.lastChecked || 'Never') + '</p></div>' +
         '<div class="row-actions">' +
-        '<button class="btn ghost" data-acc="check" data-i="' + i + '">Check now</button>' +
-        '<button class="btn ghost" data-acc="toggle" data-i="' + i + '">' + (/Disabled/i.test(a.status || '') ? 'Enable' : 'Disable') + '</button>' +
-        '<button class="btn ghost" data-acc="remove" data-i="' + i + '">Remove</button>' +
+        '<button class="btn ghost" data-acc="check" data-i="' + i + '"' + (canWrite() ? '' : ' disabled title="Your role is read-only."') + '>Check now</button>' +
+        '<button class="btn ghost" data-acc="toggle" data-i="' + i + '"' + (canWrite() ? '' : ' disabled title="Your role is read-only."') + '>' + (/Disabled/i.test(a.status || '') ? 'Enable' : 'Disable') + '</button>' +
+        '<button class="btn ghost" data-acc="remove" data-i="' + i + '"' + (canWrite() ? '' : ' disabled title="Your role is read-only."') + '>Remove</button>' +
         '</div></div>';
     }).join('');
     $$('[data-acc]', wrap).forEach((b) => b.addEventListener('click', () => accountAction(b.dataset.acc, Number(b.dataset.i))));
   }
   async function accountAction(act, i) {
+    if (!canWrite()) { appError('Your role is read-only.'); return; }
     // Start from stored accounts, or from defaults when nothing is stored yet.
     let list = accounts.length ? accounts.slice() : ACCOUNT_DEFAULTS.map((a) => Object.assign({}, a));
     if (act === 'remove') {
@@ -1001,6 +1032,7 @@
       : '<p class="empty">No backups yet.</p>';
   }
   async function handleBackup() {
+    if (!canWrite()) { appError('Your role is read-only.'); return; }
     try {
       const r = await apiCall('backup', {}, true);
       if (!r || !r.ok) { appError((r && r.error) || 'Backup failed.'); return; }
@@ -1019,6 +1051,63 @@
   }
 
   /* ---------- app settings ---------- */
+  /* ---------- restore (super_admin only; backend validates first) ---------- */
+  async function handleRestoreFile(file) {
+    if (!isSuper()) { appError('Only a super admin can restore a backup.'); return; }
+    let snap;
+    try { snap = JSON.parse(await file.text()); }
+    catch { appError('That file is not a valid backup (it is not JSON).'); return; }
+    if (!snap || typeof snap !== 'object' || Array.isArray(snap)) { appError('That file is not a valid backup.'); return; }
+    const tabs = Object.keys(snap).filter((t) => typeof snap[t] === 'string');
+    if (!tabs.length) { appError('That backup file has no tab data in it.'); return; }
+    const rows = tabs.map((t) => ({ tab: t, n: Math.max(0, String(snap[t]).split('\n').length - 1) }));
+    openModal('Restore backup',
+      '<p><b>This replaces the current data</b> in ' + tabs.length + ' tab(s) with the backup. The current data in those tabs is overwritten — download a fresh backup first if you want to keep it.</p>' +
+      '<div>' + rows.map((r) => '<div class="kv-row"><span>' + esc(r.tab) + '</span><b>' + fmt(r.n) + ' rows</b></div>').join('') + '</div>' +
+      '<p class="hint">Live admin sessions are not affected. The backend checks every tab before writing anything — a bad file changes nothing.</p>',
+      async () => {
+        const r = await apiCall('restore', { backup: snap, confirm: true }, true);
+        if (!r || !r.ok) {
+          if (/Unknown action/.test((r && r.error) || '')) throw new Error('Your backend script is out of date — paste the new Code.gs into Apps Script and redeploy the web app, then try again.');
+          throw new Error((r && r.error) || 'Restore failed.');
+        }
+        showStatus($('appError'), 'Backup restored: ' + Object.keys(r.restored || {}).map((t) => t + ' (' + r.restored[t] + ' rows)').join(', ') + '.', 'ok');
+        loadDatabase(); loadDashboard();
+      });
+    $('modalSave').textContent = 'Restore backup';
+  }
+
+  /* ---------- API key overrides (this browser only) ----------
+     The public app reads its keys from vd_settings when present, else
+     the built-in keys in config.js. An override set here affects only
+     this browser — the same limit as admin-set limits. */
+  function loadKeyOverrides() {
+    const main = readJson(LS_MAIN_SETTINGS, {});
+    const show = (id, val) => { const e = $(id); if (e) e.textContent = val ? '••••••••' + String(val).slice(-4) : 'Using the built-in key'; };
+    show('rapidKeyState', main.rapidapiKey);
+    show('scrappaKeyState', main.scrappaKey);
+  }
+  function saveKeyOverrides() {
+    if (!canWrite()) { showStatus($('keyMsg'), 'Your role is read-only.', 'err'); return; }
+    const main = readJson(LS_MAIN_SETTINGS, {});
+    const rk = $('overrideRapidKey').value.trim();
+    const sk = $('overrideScrappaKey').value.trim();
+    if (rk) main.rapidapiKey = rk;
+    if (sk) main.scrappaKey = sk;
+    localStorage.setItem(LS_MAIN_SETTINGS, JSON.stringify(main));
+    $('overrideRapidKey').value = ''; $('overrideScrappaKey').value = '';
+    loadKeyOverrides();
+    showStatus($('keyMsg'), 'Keys saved for this browser. The public app will use them from now on.', 'ok');
+  }
+  function clearKeyOverrides() {
+    if (!canWrite()) { showStatus($('keyMsg'), 'Your role is read-only.', 'err'); return; }
+    const main = readJson(LS_MAIN_SETTINGS, {});
+    delete main.rapidapiKey; delete main.scrappaKey;
+    localStorage.setItem(LS_MAIN_SETTINGS, JSON.stringify(main));
+    loadKeyOverrides();
+    showStatus($('keyMsg'), 'Overrides cleared — the built-in keys are used again.', 'ok');
+  }
+
   async function loadAppSettings() {
     try {
       const g = await apiCall('settingsGet', {}, true);
@@ -1037,6 +1126,7 @@
   }
   async function handleSaveAppSettings(e) {
     e.preventDefault();
+    if (!canWrite()) { showStatus($('settingsError'), 'Your role is read-only.', 'err'); return; }
     showStatus($('settingsError'), ''); showStatus($('settingsOk'), '');
     const payload = {
       appName: $('setAppName').value.trim() || 'Video Downloader',
@@ -1175,6 +1265,15 @@
     downloadFile(selectedDbTab + '.csv', selectedDbCsv, 'text/csv');
   });
   $('dbBackupBtn').addEventListener('click', handleBackup);
+  $('dbRestoreBtn').addEventListener('click', () => $('dbRestoreFile').click());
+  $('dbRestoreFile').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (f) handleRestoreFile(f);
+  });
+
+  $('keySaveBtn').addEventListener('click', saveKeyOverrides);
+  $('keyClearBtn').addEventListener('click', clearKeyOverrides);
 
   $('appSettingsForm').addEventListener('submit', handleSaveAppSettings);
 

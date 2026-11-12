@@ -386,6 +386,11 @@ body[data-page="converter"] .legal { order: 6; }
 
 /* ---------- History table (desktop) / cards (mobile) ---------- */
 .history-list { display: flex; flex-direction: column; }
+/* History search + platform filter (matches the admin panel's filter row). */
+.filter-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 6px; }
+.filter-row input[type="search"] { flex: 1; min-width: 180px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; color: var(--text); padding: 10px 14px; font: inherit; font-size: 14px; }
+.filter-row select { background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; color: var(--text); padding: 10px 12px; font: inherit; font-size: 14px; }
+.filter-row input:focus, .filter-row select:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(232, 17, 45, .2); outline: none; }
 .history-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
 .history-table th, .history-table td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .history-table th { color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
