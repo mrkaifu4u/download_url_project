@@ -1008,23 +1008,38 @@
       } else if (tool === 'to_song' && detected.platform === 'instagram') {
         // Instagram converter: fetch the real video with the working IG
         // API, then extract the audio IN THE BROWSER — no card, no server.
-        // The engine loads in parallel with the video fetch. One retry:
-        // the video fetch sometimes fails on a transient network/DNS
-        // blip (seen live 2026-11-12), and a fresh attempt usually works.
+        // The engine loads in parallel with the video fetch.
+        // Two phases, so a flaky file server does not burn API calls:
+        // the API is asked at most twice for the video URL, while the
+        // byte download itself gets four attempts with back-off
+        // (2s / 4s / 8s) — the file server sometimes stalls or drops
+        // mid-stream (seen live 2026-11-12: progress reached ~10% then
+        // died, four times in a row in the test browser), and a fresh
+        // attempt usually works. Mobile networks drop the same way, so
+        // retries help real users too — not just the test browser.
         const enginePromise = getFFmpeg();
-        let vid = null, bytes = null;
-        for (let attempt = 0; attempt < 2; attempt++) {
+        let vid = null;
+        for (let attempt = 0; attempt < 2 && !vid; attempt++) {
           try {
             vid = await fetchInstagram(url);
-            const vurl = (vid.formats[0] && vid.formats[0].url) || '';
-            if (!vurl) throw new Error('No video file was returned for this link.');
+            if (!((vid.formats[0] && vid.formats[0].url) || '')) throw new Error('No video file was returned for this link.');
+          } catch (e) {
+            vid = null;
+            if (attempt === 0) await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+        if (!vid) throw new Error('We couldn\'t get this video right now. Please try again in a moment.');
+        const vurl = vid.formats[0].url;
+        let bytes = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try {
             bytes = await fetchBytesWithProgress(vurl, p => showConvertProgress(5 + Math.round(p * 30), 'Downloading the video… ' + Math.round(p * 100) + '%'));
             break; // success
           } catch (e) {
-            vid = null; bytes = null;
-            if (attempt === 0) {
-              showConvertProgress(5, 'Network hiccup — retrying…');
-              await new Promise(r => setTimeout(r, 2000));
+            bytes = null;
+            if (attempt < 3) {
+              showConvertProgress(5, 'Network hiccup — retrying (' + (attempt + 2) + '/4)…');
+              await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt)));
             }
           }
         }
@@ -1246,17 +1261,18 @@
       return;
     }
     // Try a blob download first so the file lands in Downloads even when
-    // the CDN blocks a plain anchor download (cross-origin). One retry:
-    // a failed first attempt is often a transient network/DNS blip.
+    // the CDN blocks a plain anchor download (cross-origin). Three
+    // attempts with back-off: a failed first attempt is often a
+    // transient network/DNS blip.
     let res = null, lastErr = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         res = await fetch(f.url);
         if (!res.ok) throw new Error('media HTTP ' + res.status);
         break;
       } catch (e) {
         lastErr = e; res = null;
-        if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
+        if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * Math.pow(2, attempt)));
       }
     }
     try {

@@ -265,3 +265,16 @@ Tests (`tests/`, run with `node tests/<file>.js` from `~/workspace`):
 (58 checks: RBAC, login, lockout, restore); `admin-role-test.js`
 checks the role UI in jsdom (24 checks); `history-filter-test.js`
 checks search/filter/export (11 checks).
+
+## v9 — converter/download retries (2026-11-12)
+
+The converter's video fetch failed 4 times in a row live (progress
+reached ~10%, then the connection dropped) while the Reel page fetched
+the same video fine — Instagram's file server stalls or drops
+mid-stream, in the test browser and on flaky mobile networks alike.
+The converter now asks the API at most twice for the video URL, then
+retries the byte download up to 4 times with back-off (2s/4s/8s), so a
+flaky server does not burn API calls. Plain downloads retry the
+initial fetch 3 times (1.5s/3s). Verified by
+`tests/converter-retry-test.js` (4 checks: API asked once, file
+fetched 3 times after 2 failures, bytes reach the converter).
