@@ -278,3 +278,16 @@ flaky server does not burn API calls. Plain downloads retry the
 initial fetch 3 times (1.5s/3s). Verified by
 `tests/converter-retry-test.js` (4 checks: API asked once, file
 fetched 3 times after 2 failures, bytes reach the converter).
+
+## v10 — mobile layout fix (2026-11-12)
+
+The Monthly Download Usage cards overflowed on phones: at 390px the
+page was 617px wide and the YouTube/Facebook cards were cut off. Cause:
+`.quota .q-head span` had `white-space: nowrap` ("14 / 500 downloads
+used" could not wrap) and the 2-column grids used `1fr` tracks, which
+cannot shrink below content size. Fixed with `minmax(0, 1fr)` tracks
++ `min-width: 0` on the cards and wrapping usage text (same fix applied
+to the stat and Quick Action grids). Verified at a true 390px viewport
+with `tests/manual-live-test.js` (puppeteer, 14 checks: no sideways
+scroll, drawer open/close, converter, tabs, notification panel,
+stacked history cards) — screenshots in `tests/screenshots/`.
