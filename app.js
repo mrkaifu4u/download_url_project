@@ -564,6 +564,95 @@
     };
   }
 
+  /* ---------- in-browser audio conversion (ffmpeg.wasm) ----------
+     No API, no card, no server: the video bytes are fetched (Instagram's
+     CDN allows cross-origin reads) and the audio is extracted ON THE
+     DEVICE with ffmpeg.wasm. Single-thread core — it works on GitHub
+     Pages, which does not send the COOP/COEP headers the multi-thread
+     build needs. MP3/M4A are re-encoded at the chosen bitrate; WAV is
+     real PCM audio (the old "WAV falls back to MP3" is gone for this
+     path). YouTube/Facebook still need their API for the video URL,
+     so only Instagram + local files convert here. */
+  let ffmpegInstance = null;
+  let ffmpegLoading = null;
+  let lastAudioBlobUrl = null;
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve;
+      s.onerror = () => reject(new Error('Could not load the converter engine from ' + src));
+      document.head.appendChild(s);
+    });
+  }
+  async function getFFmpeg() {
+    if (ffmpegInstance) return ffmpegInstance;
+    if (ffmpegLoading) return ffmpegLoading;
+    ffmpegLoading = (async () => {
+      if (!window.FFmpegWASM || !window.FFmpegUtil) {
+        await loadScript('https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js');
+        await loadScript('https://unpkg.com/@ffmpeg/util@0.12.2/dist/umd/index.js');
+      }
+      const ff = new window.FFmpegWASM.FFmpeg();
+      const base = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
+      await ff.load({
+        coreURL: await window.FFmpegUtil.toBlobURL(base + '/ffmpeg-core.js', 'text/javascript'),
+        wasmURL: await window.FFmpegUtil.toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm')
+      });
+      ffmpegInstance = ff;
+      return ff;
+    })();
+    try { return await ffmpegLoading; }
+    catch (e) { ffmpegLoading = null; throw e; } // let the next attempt retry
+  }
+  async function fetchBytesWithProgress(url, onProgress) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Video file returned HTTP ' + res.status);
+    const total = Number(res.headers.get('content-length') || 0);
+    if (!res.body) { const b = new Uint8Array(await res.arrayBuffer()); if (onProgress) onProgress(1); return b; }
+    const reader = res.body.getReader();
+    const chunks = []; let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); received += value.length;
+      if (total && onProgress) onProgress(received / total);
+    }
+    const out = new Uint8Array(received);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  }
+  async function convertVideoToAudio(videoBytes, title, thumbnail, onTranscode) {
+    const ff = await getFFmpeg();
+    const fmt = audioFormatChoice; // mp3 | m4a | wav
+    const br = audioQualityChoice; // 128 | 192 | 320
+    await ff.writeFile('input.mp4', videoBytes);
+    const outName = 'output.' + fmt;
+    const args = fmt === 'wav'
+      ? ['-i', 'input.mp4', '-vn', '-codec:a', 'pcm_s16le', outName]
+      : fmt === 'm4a'
+        ? ['-i', 'input.mp4', '-vn', '-codec:a', 'aac', '-b:a', br + 'k', outName]
+        : ['-i', 'input.mp4', '-vn', '-codec:a', 'libmp3lame', '-b:a', br + 'k', outName];
+    const onProg = ({ progress }) => { if (onTranscode) onTranscode(progress || 0); };
+    if (typeof ff.on === 'function') ff.on('progress', onProg);
+    let code;
+    try { code = await ff.exec(args); }
+    finally { if (typeof ff.off === 'function') { try { ff.off('progress', onProg); } catch {} } }
+    if (code !== 0) throw new Error('The converter could not extract audio from this video — it may have no audio track.');
+    const data = await ff.readFile(outName);
+    const mime = fmt === 'mp3' ? 'audio/mpeg' : fmt === 'm4a' ? 'audio/mp4' : 'audio/wav';
+    if (lastAudioBlobUrl) { try { URL.revokeObjectURL(lastAudioBlobUrl); } catch {} }
+    const url = URL.createObjectURL(new Blob([data], { type: mime }));
+    lastAudioBlobUrl = url;
+    const q = fmt === 'wav' ? 'WAV' : fmt.toUpperCase() + ' · ' + br + ' kbps';
+    return {
+      title: title || 'Converted audio', caption: '', author: '',
+      thumbnail: thumbnail || '', duration: '',
+      formats: [{ quality: q, label: fmt === 'wav' ? 'WAV · lossless' : fmt.toUpperCase() + ' · ' + br + ' kbps', ext: fmt, url }],
+      isAudio: true, wavFallback: false, convertedLocally: true
+    };
+  }
+
   function fmtSize(b) {
     b = Number(b); if (!b) return '';
     return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB';
@@ -577,18 +666,25 @@
   /* ---------- fetch flow ---------- */
   async function handleFetch() {
     const tool = currentTool;
+    // Converter file mode: a chosen local file is converted when the
+    // URL box is empty (a pasted URL wins when both are given).
+    const uploadFile = (tool === 'to_song' && el.audioFileInput && el.audioFileInput.files && el.audioFileInput.files[0]) || null;
     // DP / Bio read the profile from either box (main URL or helper field):
     // a full profile link, a bare username, @username, or a numeric ID.
     const rawInput = (tool === 'ig_dp' || tool === 'ig_bio')
       ? (el.urlInput.value.trim() || el.usernameInput.value.trim())
       : el.urlInput.value.trim();
-    if (!rawInput) {
+    const isFileMode = !!uploadFile && !rawInput;
+    if (!rawInput && !isFileMode) {
       setStatus(tool === 'ig_dp' || tool === 'ig_bio' ? 'Enter an Instagram username or profile link first.' : 'Paste a video URL first.', 'err');
       return;
     }
     let detected, profileRef = null;
     let url = rawInput;
-    if (tool === 'ig_dp' || tool === 'ig_bio') {
+    if (isFileMode) {
+      detected = { platform: 'local', kind: 'file' };
+      url = uploadFile.name;
+    } else if (tool === 'ig_dp' || tool === 'ig_bio') {
       profileRef = profileInputOf(rawInput);
       if (!profileRef) {
         setStatus('This URL is invalid for ' + (tool === 'ig_dp' ? 'DP Download' : 'Copy Bio') + '. Please paste a correct Instagram profile link or username (instagram.com/<username>/ or just the username).', 'err');
@@ -610,26 +706,37 @@
       }
     }
 
-    const bucket = bucketFor(detected.platform, tool);
-    if (isHostDisabled(bucket) || (detected.platform === 'facebook' && isHostDisabled('facebook'))) {
+    // Converter: Instagram uses the working IG API (counts against the
+    // Instagram bucket); a local file uses no API call at all.
+    let bucket = bucketFor(detected.platform, tool);
+    if (tool === 'to_song' && detected.platform === 'instagram') bucket = 'instagram';
+    if (isFileMode) bucket = null;
+    if (bucket && (isHostDisabled(bucket) || (detected.platform === 'facebook' && isHostDisabled('facebook')))) {
       setStatus('This service is temporarily disabled by the admin. Please try another platform.', 'err');
       return;
     }
-    if (quotaLeft(bucket) <= 0) {
+    if (bucket && quotaLeft(bucket) <= 0) {
       setStatus('Monthly limit reached for ' + bucket + ' (' + settings.limits[bucket] + '/month). It resets ' + nextResetDate() + '.', 'err');
       return;
     }
-    if (!needKey()) return;
+    if (!isFileMode && !needKey()) return;
 
     el.fetchBtn.disabled = true;
-    el.fetchBtn.textContent = 'Fetching…';
-    setStatus('<span class="spinner"></span>Checking the video… (uses 1 API call)', 'info');
-    if (tool === 'to_song') showConvertProgress(20, 'Converting… fetching the audio stream from the API');
+    el.fetchBtn.textContent = tool === 'to_song' ? 'Converting…' : 'Fetching…';
+    if (el.convertBtn) el.convertBtn.disabled = true;
+    setStatus(isFileMode ? '<span class="spinner"></span>Converting your file… (no API call — it never leaves your device)' : '<span class="spinner"></span>Checking the video… (uses 1 API call)', 'info');
+    if (tool === 'to_song') showConvertProgress(5, isFileMode ? 'Converting your file…' : 'Converting… loading the converter engine');
     el.previewCard.classList.remove('show');
 
     try {
       let result;
-      if (profileRef) {
+      if (isFileMode) {
+        // Local file: no API, no upload — the audio is extracted on
+        // the device with ffmpeg.wasm.
+        showConvertProgress(5, 'Loading converter engine… (one-time download, ~30 MB)');
+        const bytes = new Uint8Array(await uploadFile.arrayBuffer());
+        result = await convertVideoToAudio(bytes, uploadFile.name.replace(/\.[^.]+$/, ''), '', p => showConvertProgress(10 + Math.round(p * 85), 'Extracting audio… ' + Math.round(p * 100) + '%'));
+      } else if (profileRef) {
         // DP / Bio: Scrappa returns the REAL bio and profile picture —
         // no invented data, ever. The picture is 150x150 unless
         // Scrappa returns an HD URL (it did not for this profile).
@@ -644,14 +751,29 @@
         }
       } else if (detected.platform === 'instagram' && (tool === 'ig_reel' || tool === 'ig_caption' || tool === 'dashboard')) {
         result = await fetchInstagram(url);
+      } else if (tool === 'to_song' && detected.platform === 'instagram') {
+        // Instagram converter: fetch the real video with the working IG
+        // API, then extract the audio IN THE BROWSER — no card, no server.
+        const vid = await fetchInstagram(url);
+        const vurl = (vid.formats[0] && vid.formats[0].url) || '';
+        if (!vurl) throw new Error('No video file was returned for this link.');
+        const enginePromise = getFFmpeg(); // load while the video downloads
+        const bytes = await fetchBytesWithProgress(vurl, p => showConvertProgress(5 + Math.round(p * 30), 'Downloading the video… ' + Math.round(p * 100) + '%'));
+        await enginePromise;
+        result = await convertVideoToAudio(bytes, vid.title, vid.thumbnail, p => showConvertProgress(40 + Math.round(p * 55), 'Extracting audio… ' + Math.round(p * 100) + '%'));
+      } else if (tool === 'to_song') {
+        // YouTube / Facebook audio still needs their API for the video
+        // URL — say so plainly instead of showing a confusing 404.
+        throw new Error('YouTube and Facebook audio still need their API subscription on RapidAPI (it asks for a card). Instagram Reels convert now — paste an Instagram Reel link, or upload a video file below.');
       } else if (detected.platform === 'youtube' && tool !== 'to_song') {
         result = await fetchYouTube(url).catch(() => fetchAllInOne(url)); // YT fallback: all-in-one
       } else {
-        result = await fetchAllInOne(url); // Facebook, Story, Video-to-Song
+        result = await fetchAllInOne(url); // Facebook, Story
       }
 
       // Video-to-Song: keep audio-only formats when the API provides them.
-      if (tool === 'to_song') {
+      // (Converted results already hold exactly the chosen format.)
+      if (tool === 'to_song' && !result.convertedLocally) {
         const audio = result.formats.filter(f => /mp3|m4a|aac|audio/i.test(f.ext + ' ' + f.quality));
         if (audio.length) result.formats = audio;
         const wanted = audio.filter(f => (f.ext || '').toLowerCase() === audioFormatChoice);
@@ -664,18 +786,21 @@
         result.isAudio = true;
       }
 
-      bumpQuota(bucket); // count AFTER a successful fetch
+      if (bucket) bumpQuota(bucket); // count AFTER a successful fetch (file mode uses no API call)
       currentResult = Object.assign(result, { sourceUrl: url, platform: detected.platform, tool, bucket });
       renderPreview(result);
-      if (tool === 'to_song') showConvertProgress(100, 'Audio ready — pick a format above, then press Download.');
-      setStatus('Video found ✓ — pick a quality, then Download. (1 ' + bucket + ' call used, ' + quotaLeft(bucket) + ' left this month.)', 'ok');
+      if (tool === 'to_song') showConvertProgress(100, 'Audio ready — press Download to save it.');
+      if (isFileMode) setStatus('Audio extracted from your file ✓ — press Download to save it. (No API call used.)', 'ok');
+      else if (tool === 'to_song') setStatus('Audio extracted in your browser ✓ — press Download to save it. (1 ' + bucket + ' call used, ' + quotaLeft(bucket) + ' left this month.)', 'ok');
+      else setStatus('Video found ✓ — pick a quality, then Download. (1 ' + bucket + ' call used, ' + quotaLeft(bucket) + ' left this month.)', 'ok');
       await logFetch(url, detected.platform, tool, bucket);
     } catch (e) {
       if (tool === 'to_song') showConvertProgress(0, 'Conversion failed — try again with a different link.');
       setStatus('Could not fetch this video: ' + escapeHtml(e.message || e), 'err');
     } finally {
       el.fetchBtn.disabled = false;
-      el.fetchBtn.textContent = '▶ Get Video';
+      el.fetchBtn.textContent = fetchBtnLabel(currentTool);
+      if (el.convertBtn) el.convertBtn.disabled = false;
     }
   }
 
@@ -754,8 +879,10 @@
       el.previewImage.onerror = showThumbFallback;
     }
     el.downloadNote.textContent = r.isAudio
-      ? (r.wavFallback ? 'WAV is not returned by the API — saved as MP3 instead. ' : '') +
-        'Audio download: this saves the audio stream the API returns (.mp3 / .m4a). The browser cannot transcode video locally — if the API returns video-only, pick the audio format above.'
+      ? (r.convertedLocally
+        ? 'Audio extracted in your browser from the video — no server was used, the file never left your device. Press Download to save it.'
+        : (r.wavFallback ? 'WAV is not returned by the API — saved as MP3 instead. ' : '') +
+          'Audio download: this saves the audio stream the API returns (.mp3 / .m4a). If the API returns video-only, pick the audio format above.')
       : 'Download saves the file straight to your Downloads folder (PC) or Files/Downloads (phone).';
 
     // Quality pills — IG usually returns a single 720p HD URL; YT/FB return several.
@@ -765,6 +892,15 @@
       const qb = Object.keys(order).find(k => (b.quality || '').includes(k));
       return (qa ? order[qa] : 9) - (qb ? order[qb] : 9);
     });
+    // "Original" = the best file the API returns (the video as uploaded).
+    // The top pill is relabelled Original (its real resolution stays as
+    // the small label), so picking Original downloads the best file and
+    // the download always follows the pill you picked. Not used for
+    // pictures (DP) or converted audio — those are not video qualities.
+    if (sorted.length && !isImage && !r.isAudio) {
+      const best = sorted[0];
+      sorted[0] = { quality: 'Original', label: (best.quality || '') + (best.ext ? ' · ' + best.ext.toUpperCase() : ''), ext: best.ext, url: best.url };
+    }
     el.qualityList.innerHTML = '';
     sorted.forEach((f, i) => {
       const b = document.createElement('button');
@@ -813,11 +949,33 @@
     el.progressBar.style.width = '15%';
     el.progressText.textContent = 'Starting download…';
     mirrorDownloadProgress();
+    // Converted audio is already a local blob — save it straight away,
+    // no network fetch needed.
+    if (f.url && f.url.indexOf('blob:') === 0) {
+      const a = document.createElement('a');
+      a.href = f.url; a.download = filename; a.click();
+      el.progressBar.style.width = '100%';
+      el.progressText.textContent = 'Saved: ' + filename;
+      mirrorDownloadProgress();
+      setStatus('Download started ✓ — check your Downloads folder.', 'ok');
+      return;
+    }
+    // Try a blob download first so the file lands in Downloads even when
+    // the CDN blocks a plain anchor download (cross-origin). One retry:
+    // a failed first attempt is often a transient network/DNS blip.
+    let res = null, lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        res = await fetch(f.url);
+        if (!res.ok) throw new Error('media HTTP ' + res.status);
+        break;
+      } catch (e) {
+        lastErr = e; res = null;
+        if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
+      }
+    }
     try {
-      // Try a blob download first so the file lands in Downloads even when
-      // the CDN blocks a plain anchor download (cross-origin).
-      const res = await fetch(f.url);
-      if (!res.ok) throw new Error('media HTTP ' + res.status);
+      if (!res) throw lastErr || new Error('network error');
       const total = Number(res.headers.get('content-length') || 0);
       const reader = res.body.getReader();
       const chunks = []; let received = 0;
@@ -839,10 +997,12 @@
     } catch (e) {
       // Fallback: direct anchor (works when the CDN allows it; the file
       // may open in a new tab on some phones — long-press → Save).
+      // Say plainly that the direct download failed and why, instead of
+      // implying it worked.
       const a = document.createElement('a');
       a.href = f.url; a.download = filename; a.target = '_blank'; a.rel = 'noopener'; a.click();
-      el.progressText.textContent = 'Opened direct link — if it plays instead of saving, long-press the video → Save / Download.';
-      setStatus('Direct download link opened. If it plays in a tab instead of saving, long-press → Save video.', 'info');
+      el.progressText.textContent = 'Direct download failed — opened the video link instead. If it does not load, try again on another network or Wi-Fi.';
+      setStatus('The file could not be downloaded directly — this browser could not reach the video server. A direct link was opened instead; if it also fails to load, try again on another network or Wi-Fi.', 'err');
     }
   }
 
@@ -860,6 +1020,15 @@
   }
 
   /* ---------- tool switching ---------- */
+  /* Fetch button label per section — the button says what it will fetch. */
+  const FETCH_BTN_LABEL = {
+    ig_reel: '▶ Get Reel', ig_story: '▶ Get Story', ig_dp: '▶ Get DP',
+    ig_caption: '▶ Get Caption', ig_bio: '▶ Get Bio', yt_short: '▶ Get Short',
+    yt_full: '▶ Get Video', fb_video: '▶ Get Video', to_song: '▶ Get Audio',
+    dashboard: '▶ Get Video'
+  };
+  const fetchBtnLabel = (t) => FETCH_BTN_LABEL[t] || '▶ Get Video';
+
   const TOOL_TEXT = {
     dashboard: ['Dash<span>board</span>', 'Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
     ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link — preview it, then download in HD.'],
@@ -870,7 +1039,7 @@
     fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link — preview it, then download. Uses the all-in-one API.'],
     yt_short: ['YouTube <span>Short</span>', 'Paste a YouTube Shorts link (youtube.com/shorts/… or youtu.be/…) and download it.'],
     yt_full: ['YouTube <span>Video</span>', 'Paste a full YouTube video link (youtube.com/watch?v=…) and pick a quality.'],
-    to_song: ['Video to <span>Song</span>', 'Paste any video link — the audio-only format is downloaded as .mp3 / .m4a (WAV is not returned by the API — picking WAV saves the MP3 stream instead). The browser cannot transcode video locally.']
+    to_song: ['Video to <span>Song</span>', 'Paste an Instagram Reel link — the audio is extracted in your browser and saved as .mp3 / .m4a / .wav (real WAV, no fallback). YouTube and Facebook audio still need their API subscription.']
   };
   const PAGE_FOR_TOOL = { dashboard: 'dashboard', ig_reel: 'instagram', ig_story: 'instagram', ig_dp: 'instagram', ig_caption: 'instagram', ig_bio: 'instagram', fb_video: 'facebook', yt_short: 'youtube', yt_full: 'youtube', to_song: 'converter' };
   function setTool(tool) {
@@ -896,6 +1065,7 @@
     if (page === 'dashboard') renderStats();
     const t = TOOL_TEXT[tool] || TOOL_TEXT.dashboard;
     el.pageTitle.innerHTML = t[0]; el.pageSub.textContent = t[1];
+    if (el.fetchBtn) el.fetchBtn.textContent = fetchBtnLabel(tool);
     el.fetchTitle.textContent = tool === 'dashboard' ? 'Download a Video'
       : tool === 'ig_dp' ? 'Profile link or username'
       : tool === 'ig_bio' ? 'Profile link or username'
@@ -966,7 +1136,7 @@
   if (el.audioQuality) el.audioQuality.addEventListener('change', () => { audioQualityChoice = el.audioQuality.value; });
   if (el.audioFileInput) el.audioFileInput.addEventListener('change', () => {
     const f = el.audioFileInput.files && el.audioFileInput.files[0];
-    if (el.audioFileName) el.audioFileName.textContent = f ? 'Chosen: ' + f.name + ' — uploads are not converted in the browser; paste a video URL above to extract audio via the API.' : 'No file chosen.';
+    if (el.audioFileName) el.audioFileName.textContent = f ? 'Chosen: ' + f.name + ' — press Convert to Audio to extract its song. (If you paste a URL above, the URL is used instead.)' : 'No file chosen.';
   });
   let trendResizeT = null;
   window.addEventListener('resize', () => { clearTimeout(trendResizeT); trendResizeT = setTimeout(drawTrend, 200); });

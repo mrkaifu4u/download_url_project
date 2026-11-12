@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112-1">
+<link rel="stylesheet" href="style.css?v=20261112-2">
 </head>
 <body>
 <div class="backdrop" id="backdrop"></div>
@@ -158,7 +158,7 @@
     <!-- ===== Video-to-Audio converter options (converter page only) ===== -->
     <section class="card converter-card" id="converterCard" style="display:none;">
       <h2><span class="dot">●</span> Video to Audio Converter</h2>
-      <p class="hint">Paste a video URL above (or pick a local file to see its name) and press Convert — the audio stream returned by the API is downloaded as MP3 / M4A. WAV is not returned by the API: if you pick WAV, the MP3 stream is saved instead and the app says so.</p>
+      <p class="hint">Paste an Instagram Reel link above (or choose a video file below) and press Convert — the audio is extracted in your browser with no server and no API key, and saved as MP3 / M4A / WAV at the quality you pick. YouTube and Facebook links still need their API subscription.</p>
       <div class="converter-grid">
         <div class="field">
           <label for="audioFileInput">Upload a video file (optional)</label>
@@ -188,7 +188,7 @@
         <div class="bar"><i id="convertBar"></i></div>
         <p id="convertText">Converting…</p>
       </div>
-      <p class="hint" style="margin-top:12px;">Honest note: a browser cannot transcode video locally, so a local file upload is <b>not</b> converted on your device — use the video URL above to extract audio via the API. The quality you pick is requested from the API where it is supported; the API returns the audio stream it has. WAV is never transcoded here: if you pick WAV and the API returns no WAV stream, the MP3 stream is saved instead and the app says so.</p>
+      <p class="hint" style="margin-top:12px;">How it works: the video is downloaded to your device and its audio is extracted locally (ffmpeg.wasm) — the file never leaves your device. A local file uses no API call at all; an Instagram link uses 1 Instagram API call to get the video. The format and bitrate you pick are the ones you get: MP3/M4A are re-encoded at your bitrate, WAV is real lossless audio.</p>
     </section>
 
     <!-- ===== Preview ===== -->
@@ -264,7 +264,7 @@
   </main>
 </div>
 
-<script src="config.js?v=20261112-1"></script>
-<script src="app.js?v=20261112-1"></script>
+<script src="config.js?v=20261112-2"></script>
+<script src="app.js?v=20261112-2"></script>
 </body>
 </html>
