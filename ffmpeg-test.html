@@ -1,5 +1,5 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>ffmpeg.wasm diagnostic v4 (temporary)</title>
+<html><head><meta charset="utf-8"><title>ffmpeg.wasm diagnostic v5 (temporary)</title>
 <script type="importmap">
 { "imports": {
   "@ffmpeg/ffmpeg": "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js",
@@ -8,21 +8,25 @@
 </script>
 </head>
 <body>
-<h1>ffmpeg.wasm diagnostic v4 — ESM + import map</h1>
+<h1>ffmpeg.wasm diagnostic v5 — blob-wrapper worker</h1>
 <pre id="out">starting…</pre>
 <script>
 const out = document.getElementById('out');
 function log(s) { out.textContent += '\n' + s; }
 (async () => {
   try {
-    log('dynamic import @ffmpeg/ffmpeg…');
     const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-    log('import OK: FFmpeg=' + typeof FFmpeg);
-    log('dynamic import @ffmpeg/util…');
     const { toBlobURL } = await import('@ffmpeg/util');
-    log('import OK: toBlobURL=' + typeof toBlobURL);
+    log('imports OK');
     const ff = new FFmpeg();
     log('FFmpeg instance created');
+    // Blob-wrapper worker: a same-origin blob module that imports the
+    // real worker.js from the CDN (cross-origin ES module imports work
+    // with CORS; cross-origin Worker scripts do not).
+    const workerBlob = URL.createObjectURL(new Blob(
+      ['import "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js";'],
+      { type: 'text/javascript' }));
+    log('worker blob URL created');
     const base = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm';
     let t0 = Date.now();
     const coreURL = await toBlobURL(base + '/ffmpeg-core.js', 'text/javascript');
@@ -31,7 +35,7 @@ function log(s) { out.textContent += '\n' + s; }
     const wasmURL = await toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm');
     log('core.wasm blob URL ok in ' + (Date.now() - t0) + 'ms');
     t0 = Date.now();
-    await ff.load({ coreURL, wasmURL });
+    await ff.load({ classWorkerURL: workerBlob, coreURL, wasmURL });
     log('ff.load() OK in ' + (Date.now() - t0) + 'ms — engine ready');
     log('DIAGNOSTIC COMPLETE: SUCCESS');
   } catch (e) {
