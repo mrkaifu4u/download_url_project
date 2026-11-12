@@ -13,7 +13,7 @@
 (function () {
   'use strict';
   const CFG = window.VD_CONFIG;
-  const { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY } = CFG;
+  const { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY, DEFAULT_SCRAPPA_KEY } = CFG;
 
   /* ---------- tiny helpers ---------- */
   const $ = (id) => document.getElementById(id);
@@ -88,10 +88,11 @@
       const s = JSON.parse(localStorage.getItem(STORE.settings) || '{}');
       return {
         rapidapiKey: s.rapidapiKey || DEFAULT_RAPIDAPI_KEY || '',
+        scrappaKey: s.scrappaKey || DEFAULT_SCRAPPA_KEY || '',
         appsScriptUrl: s.appsScriptUrl || '',
         limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}, s.limits || {})
       };
-    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', appsScriptUrl: '', limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}) }; }
+    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', scrappaKey: DEFAULT_SCRAPPA_KEY || '', appsScriptUrl: '', limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}) }; }
   }
   function saveSettings(s) { localStorage.setItem(STORE.settings, JSON.stringify(s)); }
   let settings = loadSettings();
@@ -125,7 +126,7 @@
       { bucket: 'youtube',   label: 'YouTube',   host: API_HOSTS.youtube },
       { bucket: 'facebook',  label: 'Facebook',  host: 'via All-in-one API' },
       { bucket: 'allinone',  label: 'All-in-one', host: API_HOSTS.allinone },
-      { bucket: 'ig_profile', label: 'IG Profile (DP/Bio)', host: API_HOSTS.ig_profile }
+      { bucket: 'ig_profile', label: 'IG Profile (DP/Bio)', host: API_HOSTS.scrappa + ' (Scrappa, free 500/mo)' }
     ];
     el.monthLabel.textContent = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     el.quotaGrid.innerHTML = rows.map(r => {
@@ -509,22 +510,55 @@
   }
 
   /* ---------- Instagram profile (DP + Bio): the REAL profile ----------
-     Instagram Scraper API — GET /api/v1/instagram/profile-info.
-     One call returns the bio AND the full-size profile picture, so DP
-     and Bio share it. (The working Instagram /fetch API answers HTTP
-     400 for profile URLs, so it cannot do DP/Bio.) */
-  async function fetchProfile(ref) {
-    const q = ref.id ? 'user_id=' + ref.id : 'username=' + encodeURIComponent(ref.username);
-    const res = await fetch('https://' + API_HOSTS.ig_profile + '/api/v1/instagram/profile-info?' + q, {
-      headers: { 'x-rapidapi-host': API_HOSTS.ig_profile, 'x-rapidapi-key': settings.rapidapiKey }
-    });
-    if (!res.ok) throw new Error('Instagram Profile API returned HTTP ' + res.status + ' — subscribe to its free plan on RapidAPI (Instagram Scraper API, $0/month, 50 requests/month).');
-    const data = await res.json();
-    const d = data.data || data;
+     Scrappa — GET /api/v2/instagram/user?username=<name> (x-api-key).
+     Free, no card. One call returns the bio AND the profile picture,
+     so DP and Bio share it. A numeric account ID is resolved first
+     with GET /api/instagram/user/basic?user_id=<id> (username + name
+     + picture); Bio then needs one more call to the full endpoint.
+     (The working Instagram /fetch API answers HTTP 400 for profile
+     URLs, so it cannot do DP/Bio. The RapidAPI profile API is not
+     used — it needs a card the owner does not have.) */
+  async function scrappaError(res) {
+    let msg = 'Scrappa returned HTTP ' + res.status;
+    try {
+      const j = await res.json();
+      if (j.error) msg += ' — ' + j.error;
+      else if (j.message) msg += ' — ' + j.message;
+    } catch { /* body was not JSON */ }
+    if (res.status === 401 || res.status === 403) msg += ' (check the saved Scrappa API key — free credits may be used up or the key may be wrong)';
+    return msg;
+  }
+  async function fetchProfile(ref, tool) {
+    if (!settings.scrappaKey) throw new Error('No Scrappa API key is saved — sign up free at scrappa.co (no card needed) and add the key.');
+    const headers = { 'x-api-key': settings.scrappaKey, 'Accept': 'application/json' };
+    let d;
+    if (ref.id) {
+      const res = await fetch('https://' + API_HOSTS.scrappa + '/api/instagram/user/basic?user_id=' + ref.id, { headers });
+      if (!res.ok) throw new Error(await scrappaError(res));
+      const b = await res.json();
+      const bu = b.user || {};
+      if (!b.found || !bu.username) throw new Error('No profile found for that account ID.');
+      if (tool === 'ig_dp') {
+        d = bu; // DP only needs the picture — the basic answer has it (1 call)
+      } else {
+        const res2 = await fetch('https://' + API_HOSTS.scrappa + '/api/v2/instagram/user?username=' + encodeURIComponent(bu.username), { headers });
+        if (!res2.ok) throw new Error(await scrappaError(res2));
+        const full = await res2.json();
+        d = full.user || {};
+        if (!full.found || !d.username) throw new Error('No profile found for that account ID.');
+      }
+    } else {
+      const res = await fetch('https://' + API_HOSTS.scrappa + '/api/v2/instagram/user?username=' + encodeURIComponent(ref.username), { headers });
+      if (!res.ok) throw new Error(await scrappaError(res));
+      const data = await res.json();
+      d = data.user || data.data || data;
+      if (!data.found && !d.username) throw new Error('No profile found for that username.');
+    }
     if (!d || (!d.username && !d.profile_pic_url && !d.id)) throw new Error('No profile found for that username.');
     return {
       username: d.username || ref.username || '', fullName: d.full_name || '',
       bio: d.biography || '', dp: d.profile_pic_url_hd || d.profile_pic_url || '',
+      dpHd: !!d.profile_pic_url_hd,
       dpThumb: d.profile_pic_url || '', followers: d.follower_count,
       following: d.following_count, isPrivate: d.is_private, isVerified: d.is_verified
     };
@@ -596,13 +630,14 @@
     try {
       let result;
       if (profileRef) {
-        // DP / Bio: one profile-info call gives the REAL bio and the
-        // full-size profile picture — no invented data, ever.
-        const p = await fetchProfile(profileRef);
+        // DP / Bio: Scrappa returns the REAL bio and profile picture —
+        // no invented data, ever. The picture is 150x150 unless
+        // Scrappa returns an HD URL (it did not for this profile).
+        const p = await fetchProfile(profileRef, tool);
         const who = (p.fullName ? p.fullName + ' ' : '') + '(@' + (p.username || profileRef.username || profileRef.id || '') + ')';
         if (tool === 'ig_dp') {
           if (!p.dp) throw new Error('No profile picture found for this profile.');
-          result = { title: who, caption: p.bio || '', author: p.username || '', thumbnail: p.dpThumb || p.dp, duration: '', formats: [{ quality: 'Profile picture', label: 'JPG', ext: 'jpg', url: p.dp }] };
+          result = { title: who, caption: p.bio || '', author: p.username || '', thumbnail: p.dpThumb || p.dp, duration: '', formats: [{ quality: 'Profile picture', label: p.dpHd ? 'JPG · HD' : 'JPG · 150×150', ext: 'jpg', url: p.dp }] };
         } else {
           if (!p.bio) throw new Error('This profile has no bio text.');
           result = { title: who, caption: p.bio, author: p.username || '', thumbnail: p.dpThumb || p.dp, duration: '', formats: [] };
@@ -829,9 +864,9 @@
     dashboard: ['Dash<span>board</span>', 'Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
     ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link — preview it, then download in HD.'],
     ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — fetch while it is still live. Uses the all-in-one API.'],
-    ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real full-size profile picture. Uses the Instagram Profile API.'],
+    ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real profile picture. Uses Scrappa (free, no card needed).'],
     ig_caption: ['Copy Reel <span>Caption</span>', 'Fetch a Reel, then copy its caption to the clipboard in one tap.'],
-    ig_bio: ['Copy <span>Bio</span>', 'Paste a profile link, or type a username or account ID — fetches the real bio from Instagram. Uses the Instagram Profile API.'],
+    ig_bio: ['Copy <span>Bio</span>', 'Paste a profile link, or type a username or account ID — fetches the real bio from Instagram. Uses Scrappa (free, no card needed).'],
     fb_video: ['Facebook <span>Video</span>', 'Paste a Facebook video link — preview it, then download. Uses the all-in-one API.'],
     yt_short: ['YouTube <span>Short</span>', 'Paste a YouTube Shorts link (youtube.com/shorts/… or youtu.be/…) and download it.'],
     yt_full: ['YouTube <span>Video</span>', 'Paste a full YouTube video link (youtube.com/watch?v=…) and pick a quality.'],

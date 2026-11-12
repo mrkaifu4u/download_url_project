@@ -44,18 +44,25 @@
  *   100 requests / month, 50 MB max file size.
  *
  * Instagram Profile (DP + Bio — the REAL profile data):
- *   instagram-scraper-api-real-time-affordable.p.rapidapi.com
- *   Endpoint:  GET https://{host}/api/v1/instagram/profile-info?username=<name>
- *              (or ?user_id=<numeric account ID>)
- *   Response:  { data: { id, username, full_name, biography,
+ *   Scrappa (NOT RapidAPI — the owner has no card, and RapidAPI
+ *   demands a card even for $0 freemium plans).
+ *   Endpoint:  GET https://scrappa.co/api/v2/instagram/user?username=<name>
+ *   By ID:     GET https://scrappa.co/api/instagram/user/basic?user_id=<id>
+ *              (returns username + name + picture; Bio then needs one
+ *              more call to the full endpoint with that username)
+ *   Auth:      x-api-key header (Scrappa API key, free signup, no card)
+ *   Response:  { success, found, user: { id, username, full_name,
+ *                biography, profile_pic_url, profile_pic_url_hd,
  *                follower_count, following_count, media_count,
- *                is_private, is_verified, profile_pic_url,
- *                profile_pic_url_hd } }
- *   Free Basic plan: $0/month, 50 requests / month, hard limit
- *   (verified on RapidAPI 2026-11-11). One call returns the bio AND
- *   the full-size profile picture, so DP Download and Copy Bio share it.
- *   The working Instagram /fetch API returns HTTP 400 for profile URLs,
- *   so it cannot be used for DP/Bio.
+ *                is_private, is_verified } }
+ *   Free plan: 500 credits / month, no card, 1 credit per lookup.
+ *   NOTE: profile_pic_url_hd was null for the owner's profile in a
+ *   live test (2026-11-12) — the picture returned is 150x150, and
+ *   Instagram's CDN rejects modified (upscaled) URLs, so DP
+ *   Download saves the real picture at 150x150.
+ *   The working Instagram /fetch API returns HTTP 400 for profile
+ *   URLs, so it cannot be used for DP/Bio. The RapidAPI Instagram
+ *   Scraper profile API (50/mo) is NOT used — it needs a card.
  */
 const DEFAULT_RAPIDAPI_KEY = 'c109599a7fmshd1709ec3e60efc1p11e3bdjsn79d71c03eb68';
 
@@ -63,8 +70,15 @@ const API_HOSTS = {
   instagram: 'instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com',
   allinone: 'social-media-downloader-api-pro.p.rapidapi.com',
   youtube: 'youtube-downloader24.p.rapidapi.com',
-  ig_profile: 'instagram-scraper-api-real-time-affordable.p.rapidapi.com'
+  scrappa: 'scrappa.co'
 };
+
+/* Built-in Scrappa API key (owner's own key, added 2026-11-12 at his
+   request so DP/Bio work for visitors without a key). Same warning as
+   the RapidAPI key above: this repo is PUBLIC — anyone can copy this
+   key and every visitor's DP/Bio fetch counts against the owner's
+   500 free Scrappa credits/month. Rotate it on Scrappa if abused. */
+const DEFAULT_SCRAPPA_KEY = 'eyJpdiI6IndWTWtDK1JiWW5DL2NPL1dGUWRiSHc9PSIsInZhbHVlIjoiV0x1Q3V2UExhV2dIaUlOaURyWndPdGo5ZDN2QVpicWQxT3ZQeXBkK0V5VHV6Q1hpN1dWTWo4aHlqakk4WU94WUV1RTRvVnRkN1pkSVBIQk1EQW9PWEE9PSIsIm1hYyI6IjA0YWZiM2NmMDc0MjZkOTg5MmRjMGExMjE3YmFhM2Y3YzA5OGFhYzk5ZDY3Y2U0NzZhMzY1NzUxZmZkYTYxZjQiLCJ0YWciOiIifQ==';
 
 /**
  * Default monthly quotas (requests / month). These are the FREE-plan
@@ -78,7 +92,7 @@ const DEFAULT_LIMITS = {
   youtube: 500,
   facebook: 100,
   allinone: 200, // free Basic plan on RapidAPI: $0/mo, 200 req/mo, hard limit
-  ig_profile: 50 // free Basic plan on RapidAPI: $0/mo, 50 req/mo, hard limit
+  ig_profile: 500 // Scrappa free plan: 500 credits/month, no card
 };
 
 /** localStorage keys used by the app. */
@@ -103,4 +117,4 @@ const TOOLS = {
 };
 
 // Expose for app.js (plain <script> files, no modules, so it works from file:// too).
-window.VD_CONFIG = { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY };
+window.VD_CONFIG = { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY, DEFAULT_SCRAPPA_KEY };
