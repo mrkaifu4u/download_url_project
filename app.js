@@ -289,7 +289,7 @@
         '<tr><td data-label="#">' + (i + 1) + '</td>' +
         '<td data-label="Platform"><span class="plat"><i>' + (platIcon[item.platform] || '▶') + '</i>' + escapeHtml(PLATFORM_LABELS[item.platform] || item.platform) + '</span></td>' +
         '<td data-label="Video Title"><div class="h-title">' + escapeHtml(item.video_url) + '</div>' +
-        '<div class="h-sub">' + escapeHtml(TOOL_LABELS[item.tool] || item.tool || '') + ' · ' + escapeHtml(item.city || 'unknown location') + '</div></td>' +
+        '<div class="h-sub">' + escapeHtml(TOOL_LABELS[item.tool] || item.tool || '') + ' · ' + escapeHtml(String(item.city || 'unknown location').replace(/ \((IP|GPS|none)\)$/, '')) + '</div></td>' +
         '<td data-label="Format"><span class="fmt-pill">' + escapeHtml(item.format || item.quality || '—') + '</span></td>' +
         '<td data-label="Downloaded On">' + escapeHtml(item.date + ' ' + item.time) + '</td>' +
         '<td data-label="" class="h-action"><button class="icon-btn" data-copy-url="' + escapeHtml(item.video_url) + '" title="Copy video link">⧉</button></td></tr>'
@@ -469,7 +469,10 @@
       ).join('');
       el.notifList.querySelectorAll('[data-notif-x]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); dismissNotification(b.dataset.notifX); }));
       el.notifList.querySelectorAll('.notif-item').forEach(item => {
-        const mark = () => markNotificationRead(item.dataset.notifId);
+        // stopPropagation: marking read rebuilds the list, which detaches
+        // the clicked element — without this, the document's outside-click
+        // handler would see a detached target and close the panel.
+        const mark = (e) => { if (e) e.stopPropagation(); markNotificationRead(item.dataset.notifId); };
         item.addEventListener('click', mark);
         item.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); mark(); } });
       });
