@@ -99,7 +99,26 @@ input, select, textarea { font-family: inherit; }
 .sidebar-foot b { color: var(--text); }
 
 /* ---------- Main / topbar ---------- */
-.main { flex: 1; min-width: 0; padding: 28px clamp(16px, 3.5vw, 40px) 60px; }
+.main { flex: 1; min-width: 0; padding: 28px clamp(16px, 3.5vw, 40px) 60px; display: flex; flex-direction: column; }
+
+/* ---------- Per-page section order (setTool sets body[data-page]) ----------
+   Dashboard: Monthly Download Usage moves up right under Quick Actions,
+   then Recent Downloads, stats, trend. Converter page: the URL card
+   first, then the converter options, then Preview, usage, and Recent
+   Downloads last. Other tool pages keep DOM order. */
+body[data-page="dashboard"] #quickActions { order: 1; }
+body[data-page="dashboard"] #quotaCard { order: 2; }
+body[data-page="dashboard"] #historyCard { order: 3; }
+body[data-page="dashboard"] #statRow { order: 4; }
+body[data-page="dashboard"] #trendCard { order: 5; }
+body[data-page="dashboard"] #previewCard { order: 6; }
+body[data-page="dashboard"] .legal { order: 7; }
+body[data-page="converter"] #fetchCard { order: 1; }
+body[data-page="converter"] #converterCard { order: 2; }
+body[data-page="converter"] #previewCard { order: 3; }
+body[data-page="converter"] #quotaCard { order: 4; }
+body[data-page="converter"] #historyCard { order: 5; }
+body[data-page="converter"] .legal { order: 6; }
 .topbar { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
 .hamburger { display: none; background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; color: var(--text); font-size: 20px; width: 46px; height: 46px; flex-shrink: 0; transition: border-color .2s, background .2s; }
 .hamburger:hover { border-color: var(--red); background: var(--red); }

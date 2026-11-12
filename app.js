@@ -41,7 +41,7 @@
     appsScriptInput: $('appsScriptInput'), settingsMsg: $('settingsMsg'),
     quickActions: $('quickActions'), qualitySelect: $('qualitySelect'), qualityRow: $('qualityRow'),
     convertProgress: $('convertProgress'), convertBar: $('convertBar'), convertText: $('convertText'),
-    fetchCard: $('fetchCard'),
+    fetchCard: $('fetchCard'), historyTitle: $('historyTitle'),
     bellBtn: $('bellBtn'), bellBadge: $('bellBadge'), notifWrap: $('notifWrap'),
     notifPanel: $('notifPanel'), notifList: $('notifList'), notifEmpty: $('notifEmpty'),
     notifCount: $('notifCount'), notifActions: $('notifActions'),
@@ -278,9 +278,28 @@
   function loadHistory() {
     try { return JSON.parse(localStorage.getItem(STORE.history) || '[]'); } catch { return []; }
   }
-  function renderHistory() {
+  /* Each tool page shows only its own downloads; the dashboard shows all.
+     A reel conversion counts as Converter work (tool to_song), not Instagram. */
+  const HISTORY_PAGE_LABEL = { instagram: 'Instagram', youtube: 'YouTube', facebook: 'Facebook', converter: 'Video to Audio' };
+  function historyForPage() {
+    const page = PAGE_FOR_TOOL[currentTool] || 'dashboard';
     const h = loadHistory();
-    if (!h.length) { el.historyList.innerHTML = '<p class="empty">No downloads yet — pick a tool from Quick Actions and download a video.</p>'; if (el.viewAllBtn) el.viewAllBtn.style.display = 'none'; return; }
+    if (page === 'dashboard') return h;
+    if (page === 'converter') return h.filter(i => i.tool === 'to_song');
+    return h.filter(i => i.platform === page && i.tool !== 'to_song');
+  }
+  function renderHistory() {
+    const h = historyForPage();
+    const page = PAGE_FOR_TOOL[currentTool] || 'dashboard';
+    if (el.historyTitle) el.historyTitle.textContent = page === 'dashboard' ? 'Recent Downloads' : 'Recent Downloads — ' + (HISTORY_PAGE_LABEL[page] || 'Downloads');
+    if (!h.length) {
+      const msg = page === 'dashboard'
+        ? 'No downloads yet — pick a tool from Quick Actions and download a video.'
+        : page === 'converter'
+        ? 'No conversions yet — convert a video and it will appear here.'
+        : 'No ' + (HISTORY_PAGE_LABEL[page] || '') + ' downloads yet — download a video and it will appear here.';
+      el.historyList.innerHTML = '<p class="empty">' + msg + '</p>'; if (el.viewAllBtn) el.viewAllBtn.style.display = 'none'; return;
+    }
     if (el.viewAllBtn) { el.viewAllBtn.style.display = ''; el.viewAllBtn.textContent = showAllHistory ? 'Show less ↑' : 'View All →'; }
     const shown = showAllHistory ? h.slice(0, 100) : h.slice(0, 6);
     const platIcon = { instagram: '◉', youtube: '▶', facebook: 'f', allinone: '♪' };
@@ -1289,6 +1308,7 @@
   function setTool(tool) {
     currentTool = tool;
     const page = PAGE_FOR_TOOL[tool] || 'dashboard';
+    document.body.dataset.page = page; // CSS reorders sections per page (converter + dashboard)
     document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === page));
     // feature tabs: show the group for this page, mark the current tool's tab
     if (el.tabsBar) {
@@ -1307,6 +1327,7 @@
     if (page !== 'converter') hideConvertProgress();
     if (el.converterCard) el.converterCard.style.display = page === 'converter' ? '' : 'none';
     if (page === 'dashboard') renderStats();
+    renderHistory(); // history is filtered per page — re-filter on every switch
     const t = TOOL_TEXT[tool] || TOOL_TEXT.dashboard;
     el.pageTitle.innerHTML = t[0]; el.pageSub.textContent = t[1];
     if (el.fetchBtn) el.fetchBtn.textContent = fetchBtnLabel(tool);
@@ -1389,8 +1410,12 @@
   el.fetchBtn.addEventListener('click', handleFetch);
   el.urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleFetch(); });
   el.downloadBtn.addEventListener('click', handleDownload);
-  $('demoBtn').addEventListener('click', loadDemo);
-  $('pasteBtn').addEventListener('click', async () => {
+  // The "Try:" row (demo + paste buttons) was removed 2026-11-12 — guard
+  // so the missing buttons cannot throw at startup.
+  const demoBtn = $('demoBtn');
+  if (demoBtn) demoBtn.addEventListener('click', loadDemo);
+  const pasteBtn = $('pasteBtn');
+  if (pasteBtn) pasteBtn.addEventListener('click', async () => {
     try { const t = await navigator.clipboard.readText(); if (t) { el.urlInput.value = t.trim(); setStatus('Pasted from clipboard.', 'info'); } }
     catch { setStatus('Clipboard read was blocked — paste with Ctrl+V / long-press instead.', 'err'); }
   });
