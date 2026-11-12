@@ -98,6 +98,7 @@ const DEFAULT_LIMITS = {
 /** localStorage keys used by the app. */
 const STORE = {
   settings: 'vd_settings',        // { rapidapiKey, hosts:{}, limits:{}, appsScriptUrl }
+  adminBackend: 'vd_admin_backend', // admin panel's backend URL — the app falls back to it (see loadSettings)
   quota: 'vd_quota',              // { "YYYY-MM": { instagram: n, youtube: n, ... } }
   history: 'vd_history',          // [ { date, time, device, platform, tool, video_url, quality, city, lat, lng, mapsLink } ]
   notifications: 'vd_notifications', // [ { id, type, title, message, time, read, userId } ] — user notifications, per browser

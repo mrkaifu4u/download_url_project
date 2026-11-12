@@ -291,3 +291,23 @@ to the stat and Quick Action grids). Verified at a true 390px viewport
 with `tests/manual-live-test.js` (puppeteer, 14 checks: no sideways
 scroll, drawer open/close, converter, tabs, notification panel,
 stacked history cards) — screenshots in `tests/screenshots/`.
+
+## v11 — Sheet logging fix (2026-11-12)
+
+`downloader_data` stayed empty even though the admin panel worked:
+the admin panel saves the Apps Script URL under `vd_admin_backend`,
+but the user app only read `vd_settings.appsScriptUrl` — and the
+user-app settings panel that used to set that key was removed, so
+there was no way left to give the app the URL and `logToSheet`
+silently skipped every download. Fixed three ways: the app now falls
+back to the admin-saved URL (`loadSettings`); the admin panel syncs
+its URL into `vd_settings` whenever it is saved or loaded
+(`setBackendUrl` / `init`); and `logToSheet` now uses a plain fetch
+and reads the backend's reply (same as the admin panel) instead of
+`no-cors`, so a rejected log shows in the console. The backend itself
+was verified correct: v1 and v2 both append no-action POSTs to
+`downloader_data` (v1 read from the repo at commit 6804130), and the
+legacy path is now covered by `tests/backend-test.js` (64 checks)
+plus the new `tests/sheet-logging-test.js` (11 checks: admin-URL-only
+regression, both-URLs precedence, no-URL skip with local history
+still saved).

@@ -90,15 +90,24 @@
 
   /* ---------- settings (localStorage only) ---------- */
   function loadSettings() {
+    // The Apps Script URL can live in two places: vd_settings (the
+    // user app's own settings) or vd_admin_backend (saved by the
+    // admin panel). The admin panel is the only place left to paste
+    // the URL since the user-app settings panel was removed — so the
+    // app MUST fall back to the admin key, or Sheet logging silently
+    // never happens (downloader_data stayed empty for exactly this
+    // reason until v11).
+    let adminUrl = '';
+    try { adminUrl = (localStorage.getItem(STORE.adminBackend) || '').trim(); } catch { /* ignore */ }
     try {
       const s = JSON.parse(localStorage.getItem(STORE.settings) || '{}');
       return {
         rapidapiKey: s.rapidapiKey || DEFAULT_RAPIDAPI_KEY || '',
         scrappaKey: s.scrappaKey || DEFAULT_SCRAPPA_KEY || '',
-        appsScriptUrl: s.appsScriptUrl || '',
+        appsScriptUrl: s.appsScriptUrl || adminUrl,
         limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}, s.limits || {})
       };
-    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', scrappaKey: DEFAULT_SCRAPPA_KEY || '', appsScriptUrl: '', limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}) }; }
+    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', scrappaKey: DEFAULT_SCRAPPA_KEY || '', appsScriptUrl: adminUrl, limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}) }; }
   }
   function saveSettings(s) { localStorage.setItem(STORE.settings, JSON.stringify(s)); }
   let settings = loadSettings();
@@ -408,12 +417,17 @@
       return;
     }
     try {
-      await fetch(settings.appsScriptUrl, {
-        method: 'POST', mode: 'no-cors',
+      // Plain fetch (same as the admin panel) — NOT no-cors: the
+      // backend's reply is readable, so a rejected or failed log is
+      // visible in the console instead of silently lost.
+      const res = await fetch(settings.appsScriptUrl, {
+        method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(entry)
       });
-      console.info('[downloader] Logged to Google Sheet (downloader_data).');
+      const j = await res.json().catch(() => null);
+      if (j && j.ok) console.info('[downloader] Logged to Google Sheet (downloader_data), row ' + j.row + '.');
+      else console.warn('[downloader] Sheet log rejected by backend:', j);
     } catch (e) {
       console.warn('[downloader] Sheet log failed:', e);
     }

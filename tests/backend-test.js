@@ -203,5 +203,23 @@ const anaAfter = post({ action: 'login', email: 'ana@example.com', password: 'an
 check('admin login still works after restore', anaAfter.ok === true, JSON.stringify(anaAfter));
 check('owner session survived restore (sessions not restored)', post({ action: 'validate', token: ownerTok }).valid === true);
 
+/* ---------- 7. legacy download logging (downloader_data) ---------- */
+// The user app POSTs a download entry with NO "action" field; the
+// backend must append it to downloader_data. (This path was never
+// harness-tested before — added 2026-11-12 after the user reported
+// no rows arriving in the Sheet.)
+const dlEntry = { date: '12/11/2026', time: '16:40:00', device: 'Mobile · Android · 390x844', platform: 'instagram', tool: 'ig_reel', video_url: 'https://www.instagram.com/reel/DeEvB06NaqX/', quality: '720p HD', format: 'MP4', city: 'Location not shared (none)', lat: '', lng: '', mapsLink: '' };
+const log1 = post(dlEntry);
+check('legacy POST (no action) logs a row', log1.ok === true && log1.row === 2, JSON.stringify(log1));
+const logRows = ss.sheets['downloader_data'].rows;
+check('downloader_data tab created with headers + 1 row', logRows.length === 2 && logRows[0][0] === 'S.No' && logRows[0][6] === 'Video URL', JSON.stringify(logRows[0]));
+check('logged row has the right columns', logRows[1][1] === '12/11/2026' && logRows[1][4] === 'instagram' && logRows[1][5] === 'ig_reel' && logRows[1][6] === 'https://www.instagram.com/reel/DeEvB06NaqX/' && logRows[1][7] === '720p HD' && logRows[1][8] === 'Location not shared (none)', JSON.stringify(logRows[1]));
+const log2 = post(Object.assign({}, dlEntry, { tool: 'to_song', video_url: 'flower.mp4', quality: '192 kbps' }));
+check('second legacy POST appends (serial 2)', log2.ok === true && log2.row === 3 && ss.sheets['downloader_data'].rows.length === 3, JSON.stringify(log2));
+const count = JSON.parse(sandbox.doGet({ parameter: { action: 'count' } }).getContent());
+check('doGet ?action=count reports 2 rows', count.ok === true && count.count === 2, JSON.stringify(count));
+const ping = JSON.parse(sandbox.doGet({ parameter: { action: 'ping' } }).getContent());
+check('doGet ?action=ping works', ping.ok === true && ping.service === 'video-downloader-admin', JSON.stringify(ping));
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

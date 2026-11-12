@@ -100,7 +100,25 @@
   }
   function setBackendUrl(url) {
     backendUrl = (url || '').trim();
-    if (backendUrl) localStorage.setItem(LS_BACKEND, backendUrl);
+    if (backendUrl) {
+      localStorage.setItem(LS_BACKEND, backendUrl);
+      syncBackendUrlToMainSettings();
+    }
+  }
+  function syncBackendUrlToMainSettings() {
+    // The public app logs downloads to the Sheet only when it knows
+    // this URL (it reads vd_settings.appsScriptUrl, falling back to
+    // the admin key). Keep both keys in sync so Sheet logging works
+    // as soon as the admin backend is configured — before v11 the
+    // admin saved the URL only under its own key and downloader_data
+    // stayed empty even though the admin panel worked fine.
+    try {
+      const main = readJson(LS_MAIN_SETTINGS, {});
+      if (main.appsScriptUrl !== backendUrl) {
+        main.appsScriptUrl = backendUrl;
+        localStorage.setItem(LS_MAIN_SETTINGS, JSON.stringify(main));
+      }
+    } catch { /* private mode — the admin key still works */ }
   }
   async function apiCall(action, params, withToken) {
     resetInactivity();
@@ -226,6 +244,7 @@
   /* ---------- auth flows ---------- */
   async function init() {
     backendUrl = getBackendUrl();
+    if (backendUrl) syncBackendUrlToMainSettings(); // heal pre-v11 browsers: share the URL with the user app
     const urlInput = $('backendUrlInput');
     if (urlInput) urlInput.value = backendUrl;
     // Ping first: login is REFUSED when there is no backend or ping fails.
