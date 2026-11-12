@@ -1,65 +1,42 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>ffmpeg.wasm diagnostic v3 (temporary)</title></head>
+<html><head><meta charset="utf-8"><title>ffmpeg.wasm diagnostic v4 (temporary)</title>
+<script type="importmap">
+{ "imports": {
+  "@ffmpeg/ffmpeg": "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js",
+  "@ffmpeg/util": "https://unpkg.com/@ffmpeg/util@0.12.2/dist/esm/index.js"
+} }
+</script>
+</head>
 <body>
-<h1>ffmpeg.wasm diagnostic v3 — classWorkerURL as blob URL</h1>
+<h1>ffmpeg.wasm diagnostic v4 — ESM + import map</h1>
 <pre id="out">starting…</pre>
 <script>
 const out = document.getElementById('out');
 function log(s) { out.textContent += '\n' + s; }
-// toBlobURL inlined (the only @ffmpeg/util function the app needs):
-// fetch the file, wrap it in a Blob, return a blob: URL.
-async function toBlobURL(url, mime) {
-  const buf = await (await fetch(url)).arrayBuffer();
-  return URL.createObjectURL(new Blob([buf], { type: mime }));
-}
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = () => { log('script onload: ' + src); resolve(); };
-    s.onerror = () => { log('script onerror: ' + src); reject(new Error('load fail ' + src)); };
-    document.head.appendChild(s);
-  });
-}
-async function tryCdn(name, ffmpegJs, workerJs, coreBase) {
-  log('=== trying ' + name + ' ===');
-  await loadScript(ffmpegJs);
-  log('after ffmpeg.js: typeof FFmpegWASM=' + typeof window.FFmpegWASM + (window.FFmpegWASM ? ' keys=' + Object.keys(window.FFmpegWASM).join(',') : ''));
-  const ff = new window.FFmpegWASM.FFmpeg();
-  log('FFmpeg instance created');
-  let t0 = Date.now();
-  const workerURL = await toBlobURL(workerJs, 'text/javascript');
-  log('worker blob URL ok in ' + (Date.now() - t0) + 'ms');
-  t0 = Date.now();
-  const coreURL = await toBlobURL(coreBase + '/ffmpeg-core.js', 'text/javascript');
-  log('core.js blob URL ok in ' + (Date.now() - t0) + 'ms');
-  t0 = Date.now();
-  const wasmURL = await toBlobURL(coreBase + '/ffmpeg-core.wasm', 'application/wasm');
-  log('core.wasm blob URL ok in ' + (Date.now() - t0) + 'ms');
-  t0 = Date.now();
-  await ff.load({ classWorkerURL: workerURL, coreURL, wasmURL });
-  log('ff.load() OK in ' + (Date.now() - t0) + 'ms — engine ready on ' + name);
-  return ff;
-}
 (async () => {
   try {
-    await tryCdn('unpkg',
-      'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
-      'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/814.ffmpeg.js',
-      'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd');
-    log('DIAGNOSTIC COMPLETE: SUCCESS (unpkg)');
+    log('dynamic import @ffmpeg/ffmpeg…');
+    const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+    log('import OK: FFmpeg=' + typeof FFmpeg);
+    log('dynamic import @ffmpeg/util…');
+    const { toBlobURL } = await import('@ffmpeg/util');
+    log('import OK: toBlobURL=' + typeof toBlobURL);
+    const ff = new FFmpeg();
+    log('FFmpeg instance created');
+    const base = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm';
+    let t0 = Date.now();
+    const coreURL = await toBlobURL(base + '/ffmpeg-core.js', 'text/javascript');
+    log('core.js blob URL ok in ' + (Date.now() - t0) + 'ms');
+    t0 = Date.now();
+    const wasmURL = await toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm');
+    log('core.wasm blob URL ok in ' + (Date.now() - t0) + 'ms');
+    t0 = Date.now();
+    await ff.load({ coreURL, wasmURL });
+    log('ff.load() OK in ' + (Date.now() - t0) + 'ms — engine ready');
+    log('DIAGNOSTIC COMPLETE: SUCCESS');
   } catch (e) {
-    log('unpkg ERROR: ' + (e && e.message ? e.message : e));
-    try {
-      await tryCdn('jsdelivr',
-        'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
-        'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/814.ffmpeg.js',
-        'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd');
-      log('DIAGNOSTIC COMPLETE: SUCCESS (jsdelivr)');
-    } catch (e2) {
-      log('jsdelivr ERROR: ' + (e2 && e2.message ? e2.message : e2));
-      log('DIAGNOSTIC COMPLETE: FAILED on both CDNs');
-    }
+    log('ERROR: ' + (e && e.message ? e.message : e));
+    log('DIAGNOSTIC COMPLETE: FAILED');
   }
 })();
 </script>
