@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Video Downloader — app.js
+   KAIFFLOW — app.js
    Flow: paste URL -> Fetch (1 API call) -> result on screen ->
          pick quality -> Download straight to PC / phone.
    A built-in RapidAPI key (config.js, owner's choice, public repo) is
@@ -73,7 +73,7 @@
     return d.indexOf(bucket) !== -1;
   }
   function applyAppSettings() {
-    if (appSettings.appName) document.title = appSettings.appName + ' — Video Downloader';
+    if (appSettings.appName) document.title = (appSettings.appName === 'Video Downloader' ? 'KAIFFLOW' : appSettings.appName) + ' — Download. Convert. Enjoy.';
     if (appSettings.maintenance) {
       const main = document.querySelector('.main');
       if (main && !document.getElementById('maintBanner')) {
@@ -242,7 +242,7 @@
     const xAt = i => padL + (data.length === 1 ? (w - padL - padR) / 2 : i * (w - padL - padR) / (data.length - 1));
     const yAt = v => padT + (1 - v / maxV) * (hgt - padT - padB);
     // gridlines + y labels (0..max)
-    ctx.font = '11px Archivo, sans-serif'; ctx.fillStyle = '#a9a7a2';
+    ctx.font = '11px Archivo, sans-serif'; ctx.fillStyle = '#B8B8C7';
     ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1;
     const steps = Math.min(5, maxV);
     for (let s = 0; s <= steps; s++) {
@@ -270,10 +270,10 @@
     ctx.fillStyle = grad; ctx.fill();
     ctx.beginPath();
     data.forEach((d, i) => { i === 0 ? ctx.moveTo(xAt(i), yAt(d.count)) : ctx.lineTo(xAt(i), yAt(d.count)); });
-    ctx.strokeStyle = '#ff2e4d'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.strokeStyle = '#8B5CF6'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
     data.forEach((d, i) => {
       ctx.beginPath(); ctx.arc(xAt(i), yAt(d.count), 4, 0, Math.PI * 2);
-      ctx.fillStyle = '#0d0d12'; ctx.fill(); ctx.strokeStyle = '#ff2e4d'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#12121D'; ctx.fill(); ctx.strokeStyle = '#EC4899'; ctx.lineWidth = 2; ctx.stroke();
     });
   }
 
@@ -1319,7 +1319,7 @@
   const fetchBtnLabel = (t) => FETCH_BTN_LABEL[t] || '▶ Get Video';
 
   const TOOL_TEXT = {
-    dashboard: ['Dash<span>board</span>', 'Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
+    dashboard: ['Dash<span>board</span>', 'Kaif ka KAIFFLOW aa gaya! Pick a tool below — Instagram, YouTube, Facebook or Video to Audio — then paste a link there.'],
     ig_reel: ['Instagram <span>Reel</span>', 'Paste an Instagram Reel link and download it in HD.'],
     ig_story: ['Instagram <span>Story</span>', 'Paste a Story link (instagram.com/stories/…). Stories expire — get it while it is still live.'],
     ig_dp: ['Instagram <span>DP</span>', 'Paste a profile link, or type a username or account ID — downloads the real profile picture.'],

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Video Downloader — admin.js
+   KAIFFLOW — admin.js
    Admin frontend only. Every admin action goes through the Apps Script
    backend (POST, Content-Type: text/plain, JSON {action, ...}).
    No dummy data: every number comes from the backend or localStorage and
@@ -520,7 +520,7 @@
     const maxV = Math.max(1, ...data.map((x) => x.count));
     const xAt = (i) => padL + (data.length === 1 ? (w - padL - padR) / 2 : i * (w - padL - padR) / (data.length - 1));
     const yAt = (v) => padT + (1 - v / maxV) * (hgt - padT - padB);
-    ctx.font = '11px Archivo, sans-serif'; ctx.fillStyle = '#a9a7a2';
+    ctx.font = '11px Archivo, sans-serif'; ctx.fillStyle = '#B8B8C7';
     ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1;
     const steps = Math.min(5, maxV);
     for (let s = 0; s <= steps; s++) {
@@ -538,19 +538,19 @@
     ctx.fillStyle = grad; ctx.fill();
     ctx.beginPath();
     data.forEach((d, i) => { i === 0 ? ctx.moveTo(xAt(i), yAt(d.count)) : ctx.lineTo(xAt(i), yAt(d.count)); });
-    ctx.strokeStyle = '#ff2e4d'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.strokeStyle = '#8B5CF6'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
     data.forEach((d, i) => {
       ctx.beginPath(); ctx.arc(xAt(i), yAt(d.count), 4, 0, Math.PI * 2);
-      ctx.fillStyle = '#0d0d12'; ctx.fill(); ctx.strokeStyle = '#ff2e4d'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#12121D'; ctx.fill(); ctx.strokeStyle = '#EC4899'; ctx.lineWidth = 2; ctx.stroke();
     });
   }
   function drawPlatform(byPlatform) {
     const cv = $('platformChart'); if (!cv) return;
     const entries = [
-      { key: 'instagram', label: 'Instagram', color: '#ff2e63' },
-      { key: 'youtube', label: 'YouTube', color: '#e8112d' },
+      { key: 'instagram', label: 'Instagram', color: '#EC4899' },
+      { key: 'youtube', label: 'YouTube', color: '#FF3B5C' },
       { key: 'facebook', label: 'Facebook', color: '#3b82f6' },
-      { key: 'allinone', label: 'Video to Audio', color: '#a855f7' }
+      { key: 'allinone', label: 'Video to Audio', color: '#8B5CF6' }
     ].map((e) => ({ label: e.label, color: e.color, count: num(byPlatform[e.key]) }))
       .filter((e) => e.count > 0);
     const total = entries.reduce((s, e) => s + e.count, 0);
@@ -562,7 +562,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, 180, 180);
     if (total === 0) {
-      ctx.beginPath(); ctx.arc(90, 90, 70, 0, Math.PI * 2); ctx.strokeStyle = '#26262d'; ctx.lineWidth = 26; ctx.stroke();
+      ctx.beginPath(); ctx.arc(90, 90, 70, 0, Math.PI * 2); ctx.strokeStyle = '#343044'; ctx.lineWidth = 26; ctx.stroke();
       $('platformLegend').innerHTML = '';
       return;
     }
@@ -847,7 +847,7 @@
     const local = readJson(LS_APP_SETTINGS, {});
     const merged = Object.assign({}, current, local, patch);
     const payload = {
-      appName: merged.appName || 'Video Downloader',
+      appName: (merged.appName && merged.appName !== 'Video Downloader') ? merged.appName : 'KAIFFLOW',
       maintenance: !!merged.maintenance,
       limits: merged.limits || appLimits(),
       disabledHosts: merged.disabledHosts || [],
@@ -1135,7 +1135,8 @@
     const s = lastSettings || {};
     const local = readJson(LS_APP_SETTINGS, {});
     const limits = s.limits || local.limits || appLimits();
-    $('setAppName').value = s.appName || local.appName || 'Video Downloader';
+    const _appName = s.appName || local.appName || 'KAIFFLOW';
+    $('setAppName').value = _appName === 'Video Downloader' ? 'KAIFFLOW' : _appName;
     $('setLimitIg').value = num(limits.instagram);
     $('setLimitYt').value = num(limits.youtube);
     $('setLimitFb').value = num(limits.facebook);
@@ -1148,7 +1149,7 @@
     if (!canWrite()) { showStatus($('settingsError'), 'Your role is read-only.', 'err'); return; }
     showStatus($('settingsError'), ''); showStatus($('settingsOk'), '');
     const payload = {
-      appName: $('setAppName').value.trim() || 'Video Downloader',
+      appName: $('setAppName').value.trim() || 'KAIFFLOW',
       maintenance: $('setMaintenance').checked,
       limits: {
         instagram: Math.max(0, Number($('setLimitIg').value) || 0),

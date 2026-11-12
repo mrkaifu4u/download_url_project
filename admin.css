@@ -1,7 +1,8 @@
 /* ==========================================================================
-   Video Downloader — admin.css (admin-only components)
-   Reuses style.css :root vars (--bg #070708, --red #e8112d, --text #f5f3ef,
-   Archivo). Login card, admin stat cards, tables, donut, modals, drawer.
+   KAIFFLOW — admin.css (admin-only components)
+   Reuses style.css :root vars (--bg #0B0B12, --purple #8B5CF6, --pink #EC4899,
+   --red #FF3B5C, --text #FFFFFF, Archivo). Login card, admin stat cards,
+   tables, donut, modals, drawer.
    ========================================================================== */
 
 /* ---------- Auth views (login / setup / change password) ---------- */
@@ -11,7 +12,7 @@
 }
 .auth-card {
   width: 100%; max-width: 460px;
-  background: linear-gradient(160deg, #141419 0%, #0c0c11 100%);
+  background: var(--card);
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: 28px; box-shadow: var(--shadow);
   animation: fadeUp .45s ease both;
@@ -19,8 +20,8 @@
 .auth-brand { justify-content: center; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
 .auth-badge {
   display: inline-block; margin: 16px 0 10px;
-  background: rgba(232, 17, 45, .12); border: 1px solid rgba(232, 17, 45, .45);
-  color: var(--red-bright); border-radius: 999px; padding: 7px 14px;
+  background: rgba(139, 92, 246, .14); border: 1px solid rgba(139, 92, 246, .5);
+  color: #C4B5FD; border-radius: 999px; padding: 7px 14px;
   font-size: 12.5px; font-weight: 800; letter-spacing: .06em;
 }
 .sidebar-badge { margin: 0 8px 10px; text-align: center; display: block; }
@@ -38,7 +39,7 @@
 .pw-toggle { flex-shrink: 0; align-self: stretch; }
 
 .check-row { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13.5px; margin: 4px 0 14px; cursor: pointer; }
-.check-row input { width: 16px; height: 16px; accent-color: var(--red); }
+.check-row input { width: 16px; height: 16px; accent-color: var(--purple); }
 
 .notice {
   border: 1px solid var(--amber); border-radius: 12px; background: rgba(245, 158, 11, .08);
@@ -72,7 +73,7 @@
 .muted-pill { background: var(--bg-3); border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
 .tab-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .tab-chips .chip { cursor: pointer; }
-.tab-chips .chip.active { border-color: var(--red); background: rgba(232, 17, 45, .12); }
+.tab-chips .chip.active { border-color: var(--purple); background: rgba(139, 92, 246, .14); }
 
 /* Donut */
 .donut-wrap { position: relative; width: 180px; margin: 6px auto 12px; }
@@ -99,18 +100,18 @@
   flex: 1; min-width: 180px; background: var(--bg); border: 1px solid var(--line);
   border-radius: 12px; color: var(--text); padding: 11px 13px; font-size: 14px; outline: none;
 }
-.filter-row input:focus { border-color: var(--red); box-shadow: 0 0 0 3px rgba(232, 17, 45, .2); }
+.filter-row input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139, 92, 246, .22); }
 .filter-row select {
   background: var(--bg-3); border: 1px solid var(--line); border-radius: 12px; color: var(--text);
   padding: 11px 12px; font-size: 13.5px; font-weight: 700; outline: none; cursor: pointer;
 }
-.filter-row select:focus { border-color: var(--red); }
+.filter-row select:focus { border-color: var(--purple); }
 .filter-row .field { margin-bottom: 0; }
 .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
 .pager span { color: var(--muted); font-size: 13px; }
 .badge { display: inline-block; border-radius: 999px; padding: 4px 10px; font-size: 11.5px; font-weight: 800; letter-spacing: .04em; }
 .badge.green { background: rgba(34, 197, 94, .14); border: 1px solid rgba(34, 197, 94, .4); color: #4ade80; }
-.badge.red { background: rgba(232, 17, 45, .12); border: 1px solid rgba(232, 17, 45, .4); color: #ff8fa0; }
+.badge.red { background: rgba(255, 59, 92, .12); border: 1px solid rgba(255, 59, 92, .4); color: #ff8fa0; }
 .badge.grey { background: var(--bg-3); border: 1px solid var(--line); color: var(--muted); }
 .badge.blue { background: rgba(59, 130, 246, .12); border: 1px solid rgba(59, 130, 246, .4); color: #93c5fd; }
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -140,8 +141,8 @@
 .account-row h3 { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
 .account-row p { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .db-tab { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; background: var(--bg); display: flex; justify-content: space-between; gap: 10px; align-items: center; cursor: pointer; width: 100%; color: var(--text); text-align: left; font-size: 14px; }
-.db-tab:hover { border-color: var(--red); }
-.db-tab.active { border-color: var(--red); background: rgba(232, 17, 45, .08); }
+.db-tab:hover { border-color: var(--purple); }
+.db-tab.active { border-color: var(--purple); background: rgba(139, 92, 246, .1); }
 .db-tab b { font-weight: 800; }
 .db-tab span { color: var(--muted); font-size: 13px; }
 
@@ -149,9 +150,11 @@
 .modal-backdrop {
   position: fixed; inset: 0; background: rgba(0, 0, 0, .65); z-index: 100;
   display: flex; align-items: center; justify-content: center; padding: 16px;
+  animation: fadeIn .2s ease both;
 }
 .modal {
-  width: 100%; max-width: 480px; background: var(--bg-2); border: 1px solid var(--line);
+  width: 100%; max-width: 480px; background: linear-gradient(160deg, rgba(29, 29, 46, .98), rgba(18, 18, 29, .98));
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow);
   animation: fadeUp .3s ease both; max-height: 90vh; overflow-y: auto;
 }
@@ -184,3 +187,5 @@
   }
   .logs-table tr.detail-row td::before { display: none; }
 }
+
+@keyframes fadeIn { from { opacity: 0; } }

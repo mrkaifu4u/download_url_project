@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Video Downloader — config.js
+   KAIFFLOW — config.js
    --------------------------------------------------------------------------
    WARNING: this file contains a built-in RapidAPI key, added at the
    owner's explicit request (2026-11-11) so visitors can use the app
