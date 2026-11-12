@@ -1,7 +1,7 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>ffmpeg.wasm diagnostic v2 (temporary)</title></head>
+<html><head><meta charset="utf-8"><title>ffmpeg.wasm diagnostic v3 (temporary)</title></head>
 <body>
-<h1>ffmpeg.wasm diagnostic v2 — no @ffmpeg/util, inline toBlobURL</h1>
+<h1>ffmpeg.wasm diagnostic v3 — classWorkerURL as blob URL</h1>
 <pre id="out">starting…</pre>
 <script>
 const out = document.getElementById('out');
@@ -21,20 +21,23 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
-async function tryCdn(name, ffmpegJs, coreBase) {
+async function tryCdn(name, ffmpegJs, workerJs, coreBase) {
   log('=== trying ' + name + ' ===');
   await loadScript(ffmpegJs);
   log('after ffmpeg.js: typeof FFmpegWASM=' + typeof window.FFmpegWASM + (window.FFmpegWASM ? ' keys=' + Object.keys(window.FFmpegWASM).join(',') : ''));
   const ff = new window.FFmpegWASM.FFmpeg();
   log('FFmpeg instance created');
   let t0 = Date.now();
+  const workerURL = await toBlobURL(workerJs, 'text/javascript');
+  log('worker blob URL ok in ' + (Date.now() - t0) + 'ms');
+  t0 = Date.now();
   const coreURL = await toBlobURL(coreBase + '/ffmpeg-core.js', 'text/javascript');
   log('core.js blob URL ok in ' + (Date.now() - t0) + 'ms');
   t0 = Date.now();
   const wasmURL = await toBlobURL(coreBase + '/ffmpeg-core.wasm', 'application/wasm');
   log('core.wasm blob URL ok in ' + (Date.now() - t0) + 'ms');
   t0 = Date.now();
-  await ff.load({ coreURL, wasmURL });
+  await ff.load({ classWorkerURL: workerURL, coreURL, wasmURL });
   log('ff.load() OK in ' + (Date.now() - t0) + 'ms — engine ready on ' + name);
   return ff;
 }
@@ -42,6 +45,7 @@ async function tryCdn(name, ffmpegJs, coreBase) {
   try {
     await tryCdn('unpkg',
       'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+      'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/814.ffmpeg.js',
       'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd');
     log('DIAGNOSTIC COMPLETE: SUCCESS (unpkg)');
   } catch (e) {
@@ -49,6 +53,7 @@ async function tryCdn(name, ffmpegJs, coreBase) {
     try {
       await tryCdn('jsdelivr',
         'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+        'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/814.ffmpeg.js',
         'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd');
       log('DIAGNOSTIC COMPLETE: SUCCESS (jsdelivr)');
     } catch (e2) {
