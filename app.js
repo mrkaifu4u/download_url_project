@@ -759,11 +759,27 @@
       } else if (tool === 'to_song' && detected.platform === 'instagram') {
         // Instagram converter: fetch the real video with the working IG
         // API, then extract the audio IN THE BROWSER — no card, no server.
-        const vid = await fetchInstagram(url);
-        const vurl = (vid.formats[0] && vid.formats[0].url) || '';
-        if (!vurl) throw new Error('No video file was returned for this link.');
-        const enginePromise = getFFmpeg(); // load while the video downloads
-        const bytes = await fetchBytesWithProgress(vurl, p => showConvertProgress(5 + Math.round(p * 30), 'Downloading the video… ' + Math.round(p * 100) + '%'));
+        // The engine loads in parallel with the video fetch. One retry:
+        // the video fetch sometimes fails on a transient network/DNS
+        // blip (seen live 2026-11-12), and a fresh attempt usually works.
+        const enginePromise = getFFmpeg();
+        let vid = null, bytes = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            vid = await fetchInstagram(url);
+            const vurl = (vid.formats[0] && vid.formats[0].url) || '';
+            if (!vurl) throw new Error('No video file was returned for this link.');
+            bytes = await fetchBytesWithProgress(vurl, p => showConvertProgress(5 + Math.round(p * 30), 'Downloading the video… ' + Math.round(p * 100) + '%'));
+            break; // success
+          } catch (e) {
+            vid = null; bytes = null;
+            if (attempt === 0) {
+              showConvertProgress(5, 'Network hiccup — retrying…');
+              await new Promise(r => setTimeout(r, 2000));
+            }
+          }
+        }
+        if (!bytes) throw new Error('Could not download this Reel right now — Instagram’s server could not be reached from this browser. Please try again in a moment.');
         await enginePromise;
         result = await convertVideoToAudio(bytes, vid.title, vid.thumbnail, p => showConvertProgress(40 + Math.round(p * 55), 'Extracting audio… ' + Math.round(p * 100) + '%'));
       } else if (tool === 'to_song') {
