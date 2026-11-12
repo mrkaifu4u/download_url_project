@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>ffmpeg.wasm diagnostic (temporary)</title></head>
+<body>
+<h1>ffmpeg.wasm diagnostic</h1>
+<pre id="out">starting…</pre>
+<script>
+const out = document.getElementById('out');
+function log(s) { out.textContent += '\n' + s; }
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => { log('script onload: ' + src); resolve(); };
+    s.onerror = () => { log('script onerror: ' + src); reject(new Error('load fail ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+async function tryCdn(name, ffmpegJs, utilJs, coreBase) {
+  log('=== trying ' + name + ' ===');
+  await loadScript(ffmpegJs);
+  log('after ffmpeg.js: typeof FFmpegWASM=' + typeof window.FFmpegWASM + (window.FFmpegWASM ? ' keys=' + Object.keys(window.FFmpegWASM).join(',') : ''));
+  await loadScript(utilJs);
+  log('after util.js: typeof FFmpegUtil=' + typeof window.FFmpegUtil + (window.FFmpegUtil ? ' keys=' + Object.keys(window.FFmpegUtil).join(',') : ''));
+  const ff = new window.FFmpegWASM.FFmpeg();
+  log('FFmpeg instance created');
+  let t0 = Date.now();
+  const coreURL = await window.FFmpegUtil.toBlobURL(coreBase + '/ffmpeg-core.js', 'text/javascript');
+  log('core.js blob URL ok in ' + (Date.now() - t0) + 'ms');
+  t0 = Date.now();
+  const wasmURL = await window.FFmpegUtil.toBlobURL(coreBase + '/ffmpeg-core.wasm', 'application/wasm');
+  log('core.wasm blob URL ok in ' + (Date.now() - t0) + 'ms');
+  await ff.load({ coreURL, wasmURL });
+  log('ff.load() OK — engine ready on ' + name);
+  return ff;
+}
+(async () => {
+  log('step 0: typeof FFmpegWASM=' + typeof window.FFmpegWASM + ', typeof FFmpegUtil=' + typeof window.FFmpegUtil);
+  try {
+    await tryCdn('unpkg',
+      'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+      'https://unpkg.com/@ffmpeg/util@0.12.2/dist/umd/index.js',
+      'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd');
+    log('DIAGNOSTIC COMPLETE: SUCCESS (unpkg)');
+  } catch (e) {
+    log('unpkg ERROR: ' + (e && e.message ? e.message : e));
+    try {
+      await tryCdn('jsdelivr',
+        'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js',
+        'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/umd/index.js',
+        'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd');
+      log('DIAGNOSTIC COMPLETE: SUCCESS (jsdelivr)');
+    } catch (e2) {
+      log('jsdelivr ERROR: ' + (e2 && e2.message ? e2.message : e2));
+      log('DIAGNOSTIC COMPLETE: FAILED on both CDNs');
+    }
+  }
+})();
+</script>
+</body></html>
