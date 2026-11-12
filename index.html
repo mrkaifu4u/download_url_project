@@ -8,7 +8,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112-2">
+<link rel="stylesheet" href="style.css?v=20261112-3">
+<!-- Import map for the converter's ffmpeg.wasm (ESM build, loaded on demand by app.js).
+     The UMD build cannot work here: its worker chunk is a cross-origin classic Worker
+     (blocked) and @ffmpeg/util's UMD file is a CommonJS file that never defines its
+     global. The ESM build's module worker loads cross-origin via CORS instead. -->
+<script type="importmap">
+{ "imports": {
+  "@ffmpeg/ffmpeg": "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js",
+  "@ffmpeg/util": "https://unpkg.com/@ffmpeg/util@0.12.2/dist/esm/index.js"
+} }
+</script>
 </head>
 <body>
 <div class="backdrop" id="backdrop"></div>
@@ -264,7 +274,7 @@
   </main>
 </div>
 
-<script src="config.js?v=20261112-2"></script>
-<script src="app.js?v=20261112-2"></script>
+<script src="config.js?v=20261112-3"></script>
+<script src="app.js?v=20261112-3"></script>
 </body>
 </html>

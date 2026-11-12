@@ -576,27 +576,32 @@
   let ffmpegInstance = null;
   let ffmpegLoading = null;
   let lastAudioBlobUrl = null;
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = src; s.onload = resolve;
-      s.onerror = () => reject(new Error('Could not load the converter engine from ' + src));
-      document.head.appendChild(s);
-    });
-  }
+  // ESM build via the import map in index.html (dynamic import works from
+  // a classic script). The UMD build cannot work here — diagnosed live
+  // 2026-11-12: @ffmpeg/util's UMD file is a CommonJS file that never
+  // defines window.FFmpegUtil, and the UMD worker chunk is a cross-origin
+  // classic Worker (blocked; as a blob URL it fails with "Cannot find
+  // module"). The ESM build's module worker loads cross-origin via CORS.
   async function getFFmpeg() {
     if (ffmpegInstance) return ffmpegInstance;
     if (ffmpegLoading) return ffmpegLoading;
     ffmpegLoading = (async () => {
-      if (!window.FFmpegWASM || !window.FFmpegUtil) {
-        await loadScript('https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js');
-        await loadScript('https://unpkg.com/@ffmpeg/util@0.12.2/dist/umd/index.js');
-      }
-      const ff = new window.FFmpegWASM.FFmpeg();
-      const base = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { toBlobURL } = await import('@ffmpeg/util');
+      const ff = new FFmpeg();
+      const base = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm';
+      // Blob-wrapper worker: browsers refuse Worker scripts from a
+      // cross-origin CDN (diagnosed live 2026-11-12, classic AND module
+      // workers), but a same-origin blob module CAN import the real
+      // worker.js from the CDN, because cross-origin ES module imports
+      // work with CORS. So the worker is a tiny blob that imports it.
+      const workerBlob = URL.createObjectURL(new Blob(
+        ['import "https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/esm/worker.js";'],
+        { type: 'text/javascript' }));
       await ff.load({
-        coreURL: await window.FFmpegUtil.toBlobURL(base + '/ffmpeg-core.js', 'text/javascript'),
-        wasmURL: await window.FFmpegUtil.toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm')
+        classWorkerURL: workerBlob,
+        coreURL: await toBlobURL(base + '/ffmpeg-core.js', 'text/javascript'),
+        wasmURL: await toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm')
       });
       ffmpegInstance = ff;
       return ff;

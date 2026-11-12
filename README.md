@@ -28,7 +28,7 @@ Archivo, square buttons) — same look as the portfolio.
 |---|---|---|---|
 | Instagram Downloader | `instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com` | Per your RapidAPI subscription — set the limit in Settings | **Verified working 2026-11-11:** `GET /fetch?url=` returns `{ ok, download_url, thumbnail_url, caption, width, height, items[] }`. Carousel/album = `items[]`. Usually a single 720p HD URL. |
 | YouTube Downloader 24 | `youtube-downloader24.p.rapidapi.com` | Basic free: **$0/mo, 500 requests / month, hard limit** (verified 2026-11-11) | `GET /api/getVideoData?videoUrlId=<full YouTube URL>` (video); `/api/getAllData` (video+audio+thumbs); `/api/getAudioData` (audio). The old `/extract?url=` path does not exist on this API. |
-| Social Media Downloader API Pro (all-in-one) | `social-media-downloader-api-pro.p.rapidapi.com` | Free Basic plan: **$0/mo, 200 requests/month, hard limit** (pricing page found 2026-11-11; Hub listing could not be independently confirmed — check the pricing page when subscribing) | `POST /extract` with `{ "url": "…" }` → `{ title, thumbnail, duration, formats: [{ quality: "1080p"/"720p"/"480p"/"360p"/"audio", url, ext }] }`. Used for Facebook, Story and Video-to-Song. |
+| Social Media Downloader API Pro (all-in-one) | `social-media-downloader-api-pro.p.rapidapi.com` | Free Basic plan: **$0/mo, 200 requests/month, hard limit** (pricing page found 2026-11-11; Hub listing could not be independently confirmed — check the pricing page when subscribing) | `POST /extract` with `{ "url": "…" }` → `{ title, thumbnail, duration, formats: [{ quality: "1080p"/"720p"/"480p"/"360p"/"audio", url, ext }] }`. Used for Facebook and Story. (Video-to-Song NO LONGER uses it — see the converter note below. The API returned HTTP 404 on 2026-11-12, so Story/Facebook are still down.) |
 | Scrappa — Instagram Profile (DP + Bio) | `scrappa.co` | Free plan: **500 credits/month, no card needed** (verified live 2026-11-12) | `GET /api/v2/instagram/user?username=<name>` with `x-api-key` header → `{ success, found, user: { username, full_name, biography, profile_pic_url, profile_pic_url_hd, follower_count, … } }`. One call gives the REAL bio and profile picture. By numeric ID: `GET /api/instagram/user/basic?user_id=<id>` (username + picture; Bio needs a second call). NOTE: profile_pic_url_hd was null for the owner's profile — the DP returned is 150x150; Instagram's CDN rejects upscaled URLs. |
 | YouTube FAST Downloader (fallback) | — | Free: **100 requests / month, 50 MB max file** | Swap in as the YouTube host in `config.js` if the main YT API does not fit. |
 
@@ -198,3 +198,27 @@ admin action, with date/time/admin/action/result).
 | `admin.html` / `admin.css` / `admin.js` | Admin login + dashboard (users, APIs, accounts, usage, logs, database, settings, audit) — separate page, not linked from `index.html` |
 | `apps-script/Code.gs` | Sheets logger (`downloader_data` tab) + admin backend (login, users, stats, logs, settings, audit, backup) |
 | `.env.example` / `.gitignore` | Key shape only; keep real keys out of git |
+
+## Video to Audio Converter (2026-11-12, no card, no server)
+
+The converter does NOT use any API for the audio any more. It runs
+ffmpeg.wasm (single-thread core, loaded on demand from unpkg) IN THE
+BROWSER: the video bytes are fetched — Instagram's CDN allows
+cross-origin reads (`Access-Control-Allow-Origin: *`, verified
+2026-11-12) — and the audio is extracted on the device. MP3/M4A are
+re-encoded at the chosen bitrate (libmp3lame / AAC); WAV is real PCM
+audio. A local video file can be converted the same way (no API call
+at all). Instagram links use 1 Instagram API call to get the video.
+YouTube/Facebook links are rejected with a plain message — their video
+URLs still need their API subscription (card). The engine is ~30 MB on
+first use, then cached.
+
+## Quality options (2026-11-12)
+
+The best file the API returns is shown as the **Original** quality pill
+(its real resolution stays as the small label, e.g. "Original / 720p HD
+· MP4"). The download always uses the pill you picked. The fetch button
+is labelled per section (Get Reel / Get Story / Get DP / Get Caption /
+Get Bio / Get Short / Get Audio). Downloads retry once, and if the
+browser cannot reach the video server the app says so plainly instead
+of implying the download worked.
