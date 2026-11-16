@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112-17">
+<link rel="stylesheet" href="style.css?v=20261112-18">
 <!-- Import map for the converter's ffmpeg.wasm (ESM build, loaded on demand by app.js).
      The UMD build cannot work here: its worker chunk is a cross-origin classic Worker
      (blocked) and @ffmpeg/util's UMD file is a CommonJS file that never defines its
@@ -233,7 +233,22 @@
         <select id="qualitySelect" aria-label="Choose quality"></select>
       </div>
       <div class="result-actions">
-        <button class="btn" id="downloadBtn">⬇ Download</button>
+        <div class="dl-btn-wrap" id="dlBtnWrap">
+          <button class="btn" id="downloadBtn">⬇ Download</button>
+          <span class="dl-ring" id="downloadRing" hidden>
+            <svg viewBox="0 0 36 36" aria-hidden="true">
+              <defs>
+                <linearGradient id="dlRingGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#8B5CF6"></stop>
+                  <stop offset="1" stop-color="#EC4899"></stop>
+                </linearGradient>
+              </defs>
+              <circle class="dl-ring-bg" cx="18" cy="18" r="15.915"></circle>
+              <circle class="dl-ring-fg" id="downloadRingFg" cx="18" cy="18" r="15.915"></circle>
+            </svg>
+            <span class="dl-ring-num" id="downloadRingNum">0%</span>
+          </span>
+        </div>
         <button class="btn ghost small" id="copyCaptionBtn">Copy caption</button>
       </div>
       <div class="progress" id="progress">
@@ -286,7 +301,7 @@
   </main>
 </div>
 
-<script src="config.js?v=20261112-17"></script>
-<script src="app.js?v=20261112-17"></script>
+<script src="config.js?v=20261112-18"></script>
+<script src="app.js?v=20261112-18"></script>
 </body>
 </html>

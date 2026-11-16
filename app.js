@@ -26,6 +26,8 @@
     resultCard: $('resultCard'), resultTitle: $('resultTitle'),
     resultCaption: $('resultCaption'), resultImage: $('resultImage'),
     downloadBtn: $('downloadBtn'),
+    dlBtnWrap: $('dlBtnWrap'), downloadRing: $('downloadRing'),
+    downloadRingFg: $('downloadRingFg'), downloadRingNum: $('downloadRingNum'),
     copyCaptionBtn: $('copyCaptionBtn'),
     progress: $('progress'), progressBar: $('progressBar'), progressText: $('progressText'),
     downloadNote: $('downloadNote'), quotaGrid: $('quotaGrid'),
@@ -870,19 +872,20 @@
     try { return await ffmpegLoading; }
     catch (e) { ffmpegLoading = null; throw e; } // let the next attempt retry
   }
-  async function fetchBytesWithProgress(url, onProgress) {
-    // Resumable byte download: phone connections often drop mid-file
-    // (the progress bar stuck at ~10% is the signature). If the stream
-    // dies, retry with Range: bytes=<received>- so the server sends
-    // only the rest — the bytes already received are kept, not thrown
-    // away. fbcdn answers HTTP 206 with Accept-Ranges: bytes and its
-    // CORS preflight allows the Range header (verified live
-    // 2026-11-16). If a server ignores Range (HTTP 200 instead of
-    // 206), restart from zero. Up to 4 attempts with 2s/4s/8s
-    // back-off; a stream that ends early (fewer bytes than the total)
-    // counts as a failure and is retried too.
+  async function fetchBytesWithProgress(url, onProgress, onRetry) {
+    // Resumable byte download: phone connections often drop mid-file.
+    // If the stream dies, retry with Range: bytes=<received>- so the
+    // server sends only the rest — the bytes already received are
+    // kept, not thrown away. fbcdn answers HTTP 206 with
+    // Accept-Ranges: bytes and its CORS preflight allows the Range
+    // header (verified live 2026-11-16). If a server ignores Range
+    // (HTTP 200 instead of 206), restart from zero. Up to 5 attempts
+    // with 2s/4s/8s/16s back-off; a stream that ends early (fewer bytes
+    // than the total) counts as a failure and is retried too. onRetry
+    // (optional) is called before each retry wait so the UI can say
+    // the download is picking up instead of looking stuck.
     const chunks = []; let received = 0, total = 0;
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       try {
         const headers = received > 0 ? { Range: 'bytes=' + received + '-' } : {};
         const res = await fetch(url, { headers });
@@ -907,7 +910,8 @@
         if (total > 0 && received < total) throw new Error('Download stopped early (' + received + ' of ' + total + ' bytes)');
         break;
       } catch (e) {
-        if (attempt === 3) throw e;
+        if (attempt === 4) throw e;
+        if (onRetry) onRetry(attempt + 1, received, total);
         await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt)));
       }
     }
@@ -1052,8 +1056,8 @@
         // The engine loads in parallel with the video fetch.
         // Two phases, so a flaky file server does not burn API calls:
         // the API is asked at most twice for the video URL, while the
-        // byte download itself gets four attempts with back-off
-        // (2s / 4s / 8s) — the file server sometimes stalls or drops
+        // byte download itself gets five attempts with back-off
+        // (2s / 4s / 8s / 16s) — the file server sometimes stalls or drops
         // mid-stream (seen live 2026-11-12: progress reached ~10% then
         // died, four times in a row in the test browser), and a fresh
         // attempt usually works. Mobile networks drop the same way, so
@@ -1251,6 +1255,23 @@
     addNotification('success', isAudio ? 'Your audio is ready' : 'Your video is ready',
       '“' + shortTitle(currentResult && currentResult.title) + '” has started downloading — check your Downloads folder.');
   }
+  /* ---------- circular download progress on the Download button ---------- */
+  function setDownloadRing(p) {
+    const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
+    if (el.downloadRingFg) el.downloadRingFg.style.strokeDashoffset = String(100 - pct);
+    if (el.downloadRingNum) el.downloadRingNum.textContent = pct + '%';
+  }
+  function showDownloadRing() {
+    setDownloadRing(0);
+    if (el.downloadRing) el.downloadRing.hidden = false;
+    if (el.dlBtnWrap) el.dlBtnWrap.classList.add('downloading');
+    if (el.downloadBtn) el.downloadBtn.disabled = true;
+  }
+  function hideDownloadRing() {
+    if (el.downloadRing) el.downloadRing.hidden = true;
+    if (el.dlBtnWrap) el.dlBtnWrap.classList.remove('downloading');
+    if (el.downloadBtn) el.downloadBtn.disabled = false;
+  }
   async function handleDownload() {
     if (!currentResult || !selectedQuality) { setStatus('Get a video first, then pick a quality.', 'err'); return; }
     const f = selectedQuality;
@@ -1259,7 +1280,7 @@
     const filename = base + '_' + f.quality.replace(/[^a-z0-9]/gi, '') + '.' + ext;
 
     el.progress.classList.add('show');
-    el.progressBar.style.width = '15%';
+    el.progressBar.style.width = '0%';
     el.progressText.textContent = 'Starting download…';
     mirrorDownloadProgress();
     // Converted audio is already a local blob — save it straight away,
@@ -1277,12 +1298,21 @@
     // Blob download first so the file lands in Downloads even when the
     // CDN blocks a plain anchor download (cross-origin). The download
     // is resumable: if the connection drops mid-file, the bytes already
-    // received are kept and only the rest is fetched again (up to 4
+    // received are kept and only the rest is fetched again (up to 5
     // attempts) — one dropped connection no longer kills the download.
+    // The ring on the button and the percentage in the progress line
+    // show the real progress; a retry says so instead of looking stuck.
+    showDownloadRing();
     try {
       const bytes = await fetchBytesWithProgress(f.url, (p, received, total) => {
-        el.progressBar.style.width = Math.round(p * 100) + '%';
-        el.progressText.textContent = 'Downloading… ' + fmtSize(received) + (total ? ' / ' + fmtSize(total) : '');
+        const pct = Math.round(p * 100);
+        el.progressBar.style.width = pct + '%';
+        el.progressText.textContent = 'Downloading… ' + pct + '% · ' + fmtSize(received) + (total ? ' / ' + fmtSize(total) : '');
+        mirrorDownloadProgress();
+        setDownloadRing(p);
+      }, (n, received, total) => {
+        const pct = total ? Math.round(received / total * 100) : 0;
+        el.progressText.textContent = 'Connection dropped — picking up from ' + pct + '%… (try ' + (n + 1) + ' of 5)';
         mirrorDownloadProgress();
       });
       const mime = f.ext === 'mp3' ? 'audio/mpeg' : /^(jpg|jpeg)$/i.test(f.ext) ? 'image/jpeg' : f.ext === 'png' ? 'image/png' : 'video/mp4';
@@ -1305,6 +1335,8 @@
       el.progressText.textContent = 'The file couldn\'t be saved directly — the video opened in a new tab instead. Tap Download in the video player to save it. If it doesn\'t load, try again on Wi-Fi.';
       setStatus('We couldn\'t save your file directly. A link was opened instead — if it doesn\'t load, please try again.', 'err');
       addNotification('info', 'Download opened in a new tab', 'We couldn\'t save the file directly, so the video link was opened instead.');
+    } finally {
+      hideDownloadRing();
     }
   }
 
