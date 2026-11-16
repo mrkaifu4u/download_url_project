@@ -80,6 +80,15 @@ const API_HOSTS = {
    500 free Scrappa credits/month. Rotate it on Scrappa if abused. */
 const DEFAULT_SCRAPPA_KEY = 'eyJpdiI6IndWTWtDK1JiWW5DL2NPL1dGUWRiSHc9PSIsInZhbHVlIjoiV0x1Q3V2UExhV2dIaUlOaURyWndPdGo5ZDN2QVpicWQxT3ZQeXBkK0V5VHV6Q1hpN1dWTWo4aHlqakk4WU94WUV1RTRvVnRkN1pkSVBIQk1EQW9PWEE9PSIsIm1hYyI6IjA0YWZiM2NmMDc0MjZkOTg5MmRjMGExMjE3YmFhM2Y3YzA5OGFhYzk5ZDY3Y2U0NzZhMzY1NzUxZmZkYTYxZjQiLCJ0YWciOiIifQ==';
 
+/* Built-in Apps Script web-app URL (the owner's own /exec URL, added
+   2026-11-12 so EVERY visitor's usage is logged to the Sheet — the URL
+   used to live only in the admin browser's localStorage, so other
+   visitors' fetches never reached the Sheet at all. Same warning as
+   the keys above: this repo is PUBLIC — anyone can see this URL and
+   POST rows to the download log. A URL pasted in Admin Settings
+   overrides it. Paste the URL between the quotes. */
+const DEFAULT_APPS_SCRIPT_URL = '';
+
 /**
  * Default monthly quotas (requests / month). These are the FREE-plan
  * figures quoted on RapidAPI at the time of writing — edit them in
@@ -121,4 +130,4 @@ const TOOLS = {
 };
 
 // Expose for app.js (plain <script> files, no modules, so it works from file:// too).
-window.VD_CONFIG = { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY, DEFAULT_SCRAPPA_KEY };
+window.VD_CONFIG = { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY, DEFAULT_SCRAPPA_KEY, DEFAULT_APPS_SCRIPT_URL };
