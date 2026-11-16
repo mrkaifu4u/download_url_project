@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20261112-18">
+<link rel="stylesheet" href="style.css?v=20261112-19">
 <!-- Import map for the converter's ffmpeg.wasm (ESM build, loaded on demand by app.js).
      The UMD build cannot work here: its worker chunk is a cross-origin classic Worker
      (blocked) and @ffmpeg/util's UMD file is a CommonJS file that never defines its
@@ -124,7 +124,10 @@
 
       <div class="url-row">
         <span class="url-ico">🔗</span>
-        <input type="url" id="urlInput" placeholder="https://www.instagram.com/reel/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…" autocomplete="off" spellcheck="false">
+        <span class="input-wrap">
+          <input type="url" id="urlInput" placeholder="https://www.instagram.com/reel/…  or  https://www.youtube.com/shorts/…  or  https://www.facebook.com/…/videos/…" autocomplete="off" spellcheck="false">
+          <button type="button" class="clear-btn" id="urlClearBtn" aria-label="Clear link" hidden>×</button>
+        </span>
         <button class="btn" id="fetchBtn">▶ Get Video</button>
       </div>
 
@@ -134,7 +137,10 @@
       <!-- DP / Bio helper input -->
       <div id="usernameRow" style="display:none; margin-top:14px;">
         <div class="url-row">
-          <input type="text" id="usernameInput" placeholder="Profile link or username — e.g. instagram.com/mr.kaifu_4u/ or mr.kaifu_4u" autocomplete="off" spellcheck="false">
+          <span class="input-wrap">
+            <input type="text" id="usernameInput" placeholder="Profile link or username — e.g. instagram.com/mr.kaifu_4u/ or mr.kaifu_4u" autocomplete="off" spellcheck="false">
+            <button type="button" class="clear-btn" id="usernameClearBtn" aria-label="Clear profile" hidden>×</button>
+          </span>
           <button class="btn ghost" id="usernameBtn">Use profile</button>
         </div>
         <p class="hint" style="margin-top:10px;">DP / Bio get the real profile from Instagram — paste a profile link, or type a username or account ID.</p>
@@ -149,7 +155,10 @@
       </div>
       <p class="hint">Kept in this browser only.</p>
       <div class="filter-row">
-        <input type="search" id="historySearch" placeholder="Search downloads…" aria-label="Search downloads">
+        <span class="input-wrap">
+          <input type="search" id="historySearch" placeholder="Search downloads…" aria-label="Search downloads">
+          <button type="button" class="clear-btn" id="historyClearBtn" aria-label="Clear search" hidden>×</button>
+        </span>
         <select id="historyPlatform" aria-label="Filter by platform">
           <option value="">All platforms</option>
           <option value="instagram">Instagram</option>
@@ -196,6 +205,7 @@
           <label class="file-pick" for="audioFileInput">📁 Choose file</label>
           <input type="file" id="audioFileInput" accept="video/*,audio/*" hidden>
           <p class="note" id="audioFileName">No file chosen. You can also drag &amp; drop a video file anywhere on this card.</p>
+          <button type="button" class="btn ghost small" id="audioFileClearBtn" style="display:none; margin-top:8px;">✕ Clear file</button>
         </div>
         <div class="field">
           <label for="audioFormat">Audio format</label>
@@ -219,6 +229,7 @@
         <div class="bar"><i id="convertBar"></i></div>
         <p id="convertText">Converting…</p>
       </div>
+      <button class="btn" id="convertDownloadBtn" style="display:none; margin-top:12px;">⬇ Download Audio</button>
       <p class="hint" style="margin-top:12px;">How it works: your video stays on your device — the audio is prepared here and saved in the format and quality you pick. MP3/M4A are saved at your chosen bitrate, WAV is real lossless audio.</p>
     </section>
 
@@ -301,7 +312,7 @@
   </main>
 </div>
 
-<script src="config.js?v=20261112-18"></script>
-<script src="app.js?v=20261112-18"></script>
+<script src="config.js?v=20261112-19"></script>
+<script src="app.js?v=20261112-19"></script>
 </body>
 </html>

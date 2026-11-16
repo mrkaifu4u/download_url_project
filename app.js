@@ -22,6 +22,9 @@
     pageTitle: $('pageTitle'), pageSub: $('pageSub'), monthLabel: $('monthLabel'),
     fetchTitle: $('fetchTitle'), fetchHint: $('fetchHint'),
     urlInput: $('urlInput'), fetchBtn: $('fetchBtn'), status: $('status'),
+    urlClearBtn: $('urlClearBtn'), usernameClearBtn: $('usernameClearBtn'),
+    historySearch: $('historySearch'), historyClearBtn: $('historyClearBtn'),
+    audioFileClearBtn: $('audioFileClearBtn'), convertDownloadBtn: $('convertDownloadBtn'),
     usernameRow: $('usernameRow'), usernameInput: $('usernameInput'), usernameBtn: $('usernameBtn'),
     resultCard: $('resultCard'), resultTitle: $('resultTitle'),
     resultCaption: $('resultCaption'), resultImage: $('resultImage'),
@@ -1026,6 +1029,7 @@
     setStatus(isFileMode ? '<span class="spinner"></span>Converting your file…' : '<span class="spinner"></span>Preparing your video…', 'info');
     if (tool === 'to_song') showConvertProgress(5, isFileMode ? 'Converting your file…' : 'Preparing your audio…');
     el.resultCard.classList.remove('show');
+    hideConverterDownload(); // a new conversion starts with no Download button
 
     try {
       let result;
@@ -1172,6 +1176,15 @@
   };
   function renderResult(r) {
     selectedQuality = null;
+    // Converted audio gets its own Download button inside the converter
+    // card — the shared Download section below stays hidden for it
+    // (reported 2026-11-17: the button felt lost in a separate section).
+    if (currentTool === 'to_song' && (r.isAudio || r.convertedLocally)) {
+      el.resultCard.classList.remove('show');
+      if (r.formats.length) selectedQuality = r.formats[0];
+      showConverterDownload(r);
+      return;
+    }
     const isVideoDownload = VIDEO_TOOLS.includes(currentTool);
     const isCopyTool = currentTool === 'ig_caption' || currentTool === 'ig_bio';
     el.resultCard.classList.add('show');
@@ -1395,6 +1408,17 @@
     // (URL box, Fetch button, DP/Bio helper) shows on every tool page.
     if (el.fetchCard) el.fetchCard.style.display = page === 'dashboard' ? 'none' : '';
     if (el.resultCard) el.resultCard.classList.remove('show'); // a new tool starts with no result shown
+    // A new tool starts with empty inputs — an Instagram link must not
+    // sit in the box when the user switches to YouTube (reported
+    // 2026-11-17). Same for the username box and any chosen converter
+    // file; the converter's Download button resets too.
+    if (el.urlInput) el.urlInput.value = '';
+    if (el.usernameInput) el.usernameInput.value = '';
+    if (el.audioFileInput) { try { el.audioFileInput.value = ''; } catch {} }
+    if (el.audioFileName) el.audioFileName.textContent = 'No file chosen. You can also drag & drop a video file anywhere on this card.';
+    if (el.audioFileClearBtn) el.audioFileClearBtn.style.display = 'none';
+    hideConverterDownload();
+    updateClearButtons();
     if (page !== 'converter') hideConvertProgress();
     if (el.converterCard) el.converterCard.style.display = page === 'converter' ? '' : 'none';
     if (page === 'dashboard') renderStats();
@@ -1423,6 +1447,34 @@
       const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
       ta.select(); document.execCommand('copy'); ta.remove(); setStatus(okMsg, 'ok');
     }
+  }
+
+  /* ---------- × clear buttons on text inputs (v19) ---------- */
+  function updateClearButtons() {
+    if (el.urlClearBtn) el.urlClearBtn.hidden = !(el.urlInput && el.urlInput.value);
+    if (el.usernameClearBtn) el.usernameClearBtn.hidden = !(el.usernameInput && el.usernameInput.value);
+    if (el.historyClearBtn) el.historyClearBtn.hidden = !(el.historySearch && el.historySearch.value);
+  }
+  function wireClearButton(input, btn, onClear) {
+    if (!input || !btn) return;
+    input.addEventListener('input', updateClearButtons);
+    btn.addEventListener('click', () => {
+      input.value = '';
+      if (onClear) onClear();
+      updateClearButtons();
+      input.focus();
+    });
+  }
+
+  /* ---------- converter's own Download button (v19) ---------- */
+  function showConverterDownload(result) {
+    if (!el.convertDownloadBtn) return;
+    const fmt = (result.formats[0] && result.formats[0].ext) || 'mp3';
+    el.convertDownloadBtn.textContent = '⬇ Download ' + String(fmt).toUpperCase();
+    el.convertDownloadBtn.style.display = '';
+  }
+  function hideConverterDownload() {
+    if (el.convertDownloadBtn) el.convertDownloadBtn.style.display = 'none';
   }
 
   /* ---------- settings panel (removed from the user app 2026-11-11:
@@ -1468,11 +1520,22 @@
   if (el.viewAllBtn) el.viewAllBtn.addEventListener('click', () => { showAllHistory = !showAllHistory; renderHistory(); });
   if (el.trendRange) el.trendRange.addEventListener('change', () => { trendDays = Number(el.trendRange.value) || 7; drawTrend(); });
   if (el.convertBtn) el.convertBtn.addEventListener('click', () => { if (currentTool !== 'to_song') setTool('to_song'); handleFetch(); });
+  if (el.convertDownloadBtn) el.convertDownloadBtn.addEventListener('click', handleDownload);
+  wireClearButton(el.urlInput, el.urlClearBtn);
+  wireClearButton(el.usernameInput, el.usernameClearBtn);
+  wireClearButton(el.historySearch, el.historyClearBtn, () => { historySearch = ''; renderHistory(); });
+  if (el.audioFileClearBtn) el.audioFileClearBtn.addEventListener('click', () => {
+    if (el.audioFileInput) { try { el.audioFileInput.value = ''; } catch {} }
+    if (el.audioFileName) el.audioFileName.textContent = 'No file chosen. You can also drag & drop a video file anywhere on this card.';
+    el.audioFileClearBtn.style.display = 'none';
+  });
+  updateClearButtons();
   if (el.audioFormat) el.audioFormat.addEventListener('change', () => { audioFormatChoice = el.audioFormat.value; });
   if (el.audioQuality) el.audioQuality.addEventListener('change', () => { audioQualityChoice = el.audioQuality.value; });
   if (el.audioFileInput) el.audioFileInput.addEventListener('change', () => {
     const f = el.audioFileInput.files && el.audioFileInput.files[0];
     if (el.audioFileName) el.audioFileName.textContent = f ? 'Chosen: ' + f.name + ' — press Convert to Audio to extract its song. (If you paste a URL above, the URL is used instead.)' : 'No file chosen.';
+    if (el.audioFileClearBtn) el.audioFileClearBtn.style.display = f ? '' : 'none';
   });
   let trendResizeT = null;
   window.addEventListener('resize', () => { clearTimeout(trendResizeT); trendResizeT = setTimeout(drawTrend, 200); });
@@ -1567,6 +1630,7 @@
       el.audioFileInput.files = dt.files;
     } catch { return false; }
     if (el.audioFileName) el.audioFileName.textContent = 'Chosen: ' + file.name + ' — press Convert to Audio to extract its song. (If you paste a URL above, the URL is used instead.)';
+    if (el.audioFileClearBtn) el.audioFileClearBtn.style.display = '';
     return true;
   }
   function isVideoFile(file) {
