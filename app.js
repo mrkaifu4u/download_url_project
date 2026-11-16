@@ -13,7 +13,7 @@
 (function () {
   'use strict';
   const CFG = window.VD_CONFIG;
-  const { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY, DEFAULT_SCRAPPA_KEY } = CFG;
+  const { API_HOSTS, DEFAULT_LIMITS, STORE, TOOLS, DEFAULT_RAPIDAPI_KEY, DEFAULT_SCRAPPA_KEY, DEFAULT_APPS_SCRIPT_URL } = CFG;
 
   /* ---------- tiny helpers ---------- */
   const $ = (id) => document.getElementById(id);
@@ -89,13 +89,13 @@
 
   /* ---------- settings (localStorage only) ---------- */
   function loadSettings() {
-    // The Apps Script URL can live in two places: vd_settings (the
-    // user app's own settings) or vd_admin_backend (saved by the
-    // admin panel). The admin panel is the only place left to paste
-    // the URL since the user-app settings panel was removed — so the
-    // app MUST fall back to the admin key, or Sheet logging silently
-    // never happens (downloader_data stayed empty for exactly this
-    // reason until v11).
+    // The Apps Script URL can live in three places, in priority order:
+    // vd_settings (the user app's own settings), vd_admin_backend
+    // (saved by the admin panel), or DEFAULT_APPS_SCRIPT_URL built
+    // into config.js. The built-in default is what lets EVERY
+    // visitor's usage reach the Sheet — before v16 the URL lived only
+    // in the admin browser's localStorage, so other visitors' fetches
+    // silently never logged (only the owner's own DP tests appeared).
     let adminUrl = '';
     try { adminUrl = (localStorage.getItem(STORE.adminBackend) || '').trim(); } catch { /* ignore */ }
     try {
@@ -103,10 +103,10 @@
       return {
         rapidapiKey: s.rapidapiKey || DEFAULT_RAPIDAPI_KEY || '',
         scrappaKey: s.scrappaKey || DEFAULT_SCRAPPA_KEY || '',
-        appsScriptUrl: s.appsScriptUrl || adminUrl,
+        appsScriptUrl: s.appsScriptUrl || adminUrl || DEFAULT_APPS_SCRIPT_URL || '',
         limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}, s.limits || {})
       };
-    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', scrappaKey: DEFAULT_SCRAPPA_KEY || '', appsScriptUrl: adminUrl, limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}) }; }
+    } catch { return { rapidapiKey: DEFAULT_RAPIDAPI_KEY || '', scrappaKey: DEFAULT_SCRAPPA_KEY || '', appsScriptUrl: adminUrl || DEFAULT_APPS_SCRIPT_URL || '', limits: Object.assign({}, DEFAULT_LIMITS, appSettings.limits || {}) }; }
   }
   function saveSettings(s) { localStorage.setItem(STORE.settings, JSON.stringify(s)); }
   let settings = loadSettings();
@@ -871,17 +871,45 @@
     catch (e) { ffmpegLoading = null; throw e; } // let the next attempt retry
   }
   async function fetchBytesWithProgress(url, onProgress) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Video file returned HTTP ' + res.status);
-    const total = Number(res.headers.get('content-length') || 0);
-    if (!res.body) { const b = new Uint8Array(await res.arrayBuffer()); if (onProgress) onProgress(1); return b; }
-    const reader = res.body.getReader();
-    const chunks = []; let received = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value); received += value.length;
-      if (total && onProgress) onProgress(received / total);
+    // Resumable byte download: phone connections often drop mid-file
+    // (the progress bar stuck at ~10% is the signature). If the stream
+    // dies, retry with Range: bytes=<received>- so the server sends
+    // only the rest — the bytes already received are kept, not thrown
+    // away. fbcdn answers HTTP 206 with Accept-Ranges: bytes and its
+    // CORS preflight allows the Range header (verified live
+    // 2026-11-16). If a server ignores Range (HTTP 200 instead of
+    // 206), restart from zero. Up to 4 attempts with 2s/4s/8s
+    // back-off; a stream that ends early (fewer bytes than the total)
+    // counts as a failure and is retried too.
+    const chunks = []; let received = 0, total = 0;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const headers = received > 0 ? { Range: 'bytes=' + received + '-' } : {};
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error('Video file returned HTTP ' + res.status);
+        if (received > 0 && res.status !== 206) { chunks.length = 0; received = 0; }
+        if (total === 0) {
+          const cr = res.headers.get('content-range');
+          total = cr ? Number((cr.split('/')[1] || '').trim() || 0) : Number(res.headers.get('content-length') || 0);
+        }
+        if (!res.body) {
+          const b = new Uint8Array(await res.arrayBuffer());
+          chunks.push(b); received += b.length;
+        } else {
+          const reader = res.body.getReader();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value); received += value.length;
+            if (total && onProgress) onProgress(received / total, received, total);
+          }
+        }
+        if (total > 0 && received < total) throw new Error('Download stopped early (' + received + ' of ' + total + ' bytes)');
+        break;
+      } catch (e) {
+        if (attempt === 3) throw e;
+        await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt)));
+      }
     }
     const out = new Uint8Array(received);
     let off = 0;
@@ -1246,34 +1274,19 @@
       notifyDownloadStarted();
       return;
     }
-    // Try a blob download first so the file lands in Downloads even when
-    // the CDN blocks a plain anchor download (cross-origin). Three
-    // attempts with back-off: a failed first attempt is often a
-    // transient network/DNS blip.
-    let res = null, lastErr = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        res = await fetch(f.url);
-        if (!res.ok) throw new Error('media HTTP ' + res.status);
-        break;
-      } catch (e) {
-        lastErr = e; res = null;
-        if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * Math.pow(2, attempt)));
-      }
-    }
+    // Blob download first so the file lands in Downloads even when the
+    // CDN blocks a plain anchor download (cross-origin). The download
+    // is resumable: if the connection drops mid-file, the bytes already
+    // received are kept and only the rest is fetched again (up to 4
+    // attempts) — one dropped connection no longer kills the download.
     try {
-      if (!res) throw lastErr || new Error('network error');
-      const total = Number(res.headers.get('content-length') || 0);
-      const reader = res.body.getReader();
-      const chunks = []; let received = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value); received += value.length;
-        if (total) { el.progressBar.style.width = Math.round(received / total * 100) + '%'; el.progressText.textContent = 'Downloading… ' + fmtSize(received) + (total ? ' / ' + fmtSize(total) : ''); mirrorDownloadProgress(); }
-      }
+      const bytes = await fetchBytesWithProgress(f.url, (p, received, total) => {
+        el.progressBar.style.width = Math.round(p * 100) + '%';
+        el.progressText.textContent = 'Downloading… ' + fmtSize(received) + (total ? ' / ' + fmtSize(total) : '');
+        mirrorDownloadProgress();
+      });
       const mime = f.ext === 'mp3' ? 'audio/mpeg' : /^(jpg|jpeg)$/i.test(f.ext) ? 'image/jpeg' : f.ext === 'png' ? 'image/png' : 'video/mp4';
-      const blob = new Blob(chunks, { type: mime });
+      const blob = new Blob([bytes], { type: mime });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = filename; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 60000);
@@ -1284,12 +1297,12 @@
       notifyDownloadStarted();
     } catch (e) {
       // Fallback: direct anchor (works when the CDN allows it; the file
-      // may open in a new tab on some phones — long-press → Save).
-      // Say plainly that the direct download failed, instead of
-      // implying it worked.
+      // may open in a new tab on some phones — tap Download in the
+      // video player to save it). Say plainly that the direct download
+      // failed, instead of implying it worked.
       const a = document.createElement('a');
       a.href = f.url; a.download = filename; a.target = '_blank'; a.rel = 'noopener'; a.click();
-      el.progressText.textContent = 'The file couldn\'t be saved directly — the video link was opened instead. If it doesn\'t load, try again on another network or Wi-Fi.';
+      el.progressText.textContent = 'The file couldn\'t be saved directly — the video opened in a new tab instead. Tap Download in the video player to save it. If it doesn\'t load, try again on Wi-Fi.';
       setStatus('We couldn\'t save your file directly. A link was opened instead — if it doesn\'t load, please try again.', 'err');
       addNotification('info', 'Download opened in a new tab', 'We couldn\'t save the file directly, so the video link was opened instead.');
     }
