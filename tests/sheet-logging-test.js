@@ -4,8 +4,11 @@
 // under vd_admin_backend while the user app only read
 // vd_settings.appsScriptUrl (and the user-app settings panel that used
 // to set it was removed). Cases: (1) admin URL only — the bug scenario,
-// (2) both URLs — vd_settings wins, (3) no URL anywhere — no POST, but
-// local history is still saved.
+// (2) both URLs — vd_settings wins, (3) no URL anywhere (built-in
+// default forced empty) — no POST, but local history is still saved,
+// (4) built-in DEFAULT_APPS_SCRIPT_URL with nothing saved — the v16
+// fix: visitors' fetches log too, (5) admin URL beats the built-in
+// default.
 const fs = require('fs');
 const { JSDOM } = require('jsdom');
 
@@ -22,7 +25,7 @@ function check(name, ok, detail) {
   else { fail++; console.log('FAIL  ' + name + (detail ? ' — ' + detail : '')); }
 }
 
-async function runCase(name, seed, expectUrl) {
+async function runCase(name, seed, expectUrl, defaultUrl) {
   const dom = new JSDOM(html, { url: 'https://mrkaifu4u.github.io/download_url_project/', runScripts: 'outside-only', pretendToBeVisual: true });
   const { window } = dom;
   const { document } = window;
@@ -56,7 +59,12 @@ async function runCase(name, seed, expectUrl) {
 
   // Seed localStorage BEFORE the app loads (settings are read at startup).
   Object.entries(seed).forEach(([k, v]) => window.localStorage.setItem(k, v));
-  window.eval(configJs);
+  // defaultUrl (4th arg) overrides the built-in DEFAULT_APPS_SCRIPT_URL
+  // in config.js for this case — so the suite stays green whether or
+  // not the owner has pasted his real URL into config.js yet.
+  const cfg = (defaultUrl === undefined) ? configJs
+    : configJs.replace(/const DEFAULT_APPS_SCRIPT_URL = '[^']*';/, "const DEFAULT_APPS_SCRIPT_URL = '" + defaultUrl + "';");
+  window.eval(cfg);
   window.eval(appJs);
 
   const $ = (id) => document.getElementById(id);
@@ -92,9 +100,12 @@ async function runCase(name, seed, expectUrl) {
 (async () => {
   const ADMIN_URL = 'https://script.google.com/macros/s/ADMIN/exec';
   const MAIN_URL = 'https://script.google.com/macros/s/MAIN/exec';
-  await runCase('admin URL only (the bug)', { vd_admin_backend: ADMIN_URL }, ADMIN_URL);
-  await runCase('both URLs (vd_settings wins)', { vd_admin_backend: ADMIN_URL, vd_settings: JSON.stringify({ appsScriptUrl: MAIN_URL }) }, MAIN_URL);
-  await runCase('no URL anywhere', {}, null);
+  const DEFAULT_URL = 'https://script.google.com/macros/s/DEFAULT/exec';
+  await runCase('admin URL only (the bug)', { vd_admin_backend: ADMIN_URL }, ADMIN_URL, '');
+  await runCase('both URLs (vd_settings wins)', { vd_admin_backend: ADMIN_URL, vd_settings: JSON.stringify({ appsScriptUrl: MAIN_URL }) }, MAIN_URL, '');
+  await runCase('no URL anywhere', {}, null, '');
+  await runCase('built-in default URL, nothing saved (v16)', {}, DEFAULT_URL, DEFAULT_URL);
+  await runCase('admin URL beats built-in default', { vd_admin_backend: ADMIN_URL }, ADMIN_URL, DEFAULT_URL);
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('HARNESS ERROR', e); process.exit(1); });
