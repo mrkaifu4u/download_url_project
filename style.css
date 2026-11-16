@@ -357,6 +357,19 @@ body[data-page="converter"] .legal { order: 6; }
 }
 #resultImage { display: block; max-width: 180px; border-radius: 14px; margin-bottom: 14px; border: 1px solid var(--line); }
 .result-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+/* Circular download progress on the Download button (v18): a ring
+   badge overlays the centre of the button while a file downloads,
+   with the percentage in the middle. r=15.915 makes the circumference
+   ~100, so stroke-dashoffset = 100 - percent. */
+.dl-btn-wrap { position: relative; display: inline-flex; }
+.dl-btn-wrap .btn { width: 100%; }
+.dl-btn-wrap.downloading .btn { opacity: .4; }
+.dl-ring { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 1; }
+.dl-ring[hidden] { display: none; }
+.dl-ring svg { width: 48px; height: 48px; transform: rotate(-90deg); background: rgba(11,11,18,.88); border-radius: 50%; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.dl-ring-bg { fill: none; stroke: #343044; stroke-width: 3.2; }
+.dl-ring-fg { fill: none; stroke: url(#dlRingGrad); stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset .25s ease; }
+.dl-ring-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: #fff; }
 .progress { display: none; margin-top: 14px; }
 .progress.show { display: block; }
 .progress .bar { height: 10px; background: var(--bg-3); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
