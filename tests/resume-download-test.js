@@ -27,8 +27,10 @@ function check(name, ok, detail) {
 }
 
 // A fake Response whose body streams `bytes` in 2-byte chunks and, when
-// dieAfter is true, throws (connection drop) after 2 chunks.
-function streamResponse(bytes, dieAfter, status, contentRange) {
+// dieAfter is true, throws (connection drop) after 2 chunks. `total` is
+// the content-length the server reports — for the dying first response
+// that is the FULL file size (10), even though only 4 bytes arrive.
+function streamResponse(bytes, dieAfter, status, contentRange, total) {
   let i = 0;
   const reader = {
     read: async () => {
@@ -42,7 +44,7 @@ function streamResponse(bytes, dieAfter, status, contentRange) {
     ok: status >= 200 && status < 300, status,
     headers: { get: (k) => {
       k = String(k).toLowerCase();
-      if (k === 'content-length') return String(bytes.length);
+      if (k === 'content-length') return String(total != null ? total : bytes.length);
       if (k === 'content-range') return contentRange || null;
       return null;
     } },
@@ -82,13 +84,13 @@ async function runCase(name, mode) {
     if (u === FBCDN) {
       mediaCalls.push({ headers: (opts && opts.headers) || {} });
       const n = mediaCalls.length;
-      if (mode === 'always-fail') return streamResponse(FILE.slice(0, 4), true, 200, null);
-      if (n === 1) return streamResponse(FILE.slice(0, 4), true, 200, null); // dies after 4 bytes
-      if (mode === 'ignore-range') return streamResponse(FILE, false, 200, null);
+      if (mode === 'always-fail') return streamResponse(FILE.slice(0, 4), true, 200, null, 10);
+      if (n === 1) return streamResponse(FILE.slice(0, 4), true, 200, null, 10); // dies after 4 bytes
+      if (mode === 'ignore-range') return streamResponse(FILE, false, 200, null, 10);
       // resume: honour the Range header, HTTP 206
       const range = (opts && opts.headers && opts.headers.Range) || '';
       const start = Number(range.replace('bytes=', '').replace('-', '')) || 0;
-      return streamResponse(FILE.slice(start), false, 206, 'bytes ' + start + '-9/10');
+      return streamResponse(FILE.slice(start), false, 206, 'bytes ' + start + '-9/10', 10 - start);
     }
     throw new Error('unexpected fetch: ' + u);
   };
@@ -106,19 +108,30 @@ async function runCase(name, mode) {
   }
   check(name + ': fetch succeeds', /video is ready/i.test($('status').textContent || ''), 'status=' + $('status').textContent);
   $('downloadBtn').click();
+  // Mid-download, during the 2s retry pause after the drop: the ring
+  // on the button must be visible at 40% (4 of 10 bytes), the button
+  // disabled, and the progress line must say it is picking up.
+  await new Promise((r) => setTimeout(r, 1000));
+  check(name + ': ring shows on the button during the retry pause', $('downloadRing').hidden === false);
+  check(name + ': ring shows the real percentage', $('downloadRingNum').textContent === '40%', 'ring=' + $('downloadRingNum').textContent);
+  check(name + ': progress bar shows the real percentage', $('progressBar').style.width === '40%', 'bar=' + $('progressBar').style.width);
+  check(name + ': progress line says it is picking up', /picking up from 40%/.test($('progressText').textContent || ''), 'text=' + $('progressText').textContent);
+  check(name + ': download button disabled while downloading', $('downloadBtn').disabled === true);
   start = Date.now();
   while (Date.now() - start < 40000) {
     await new Promise((r) => setTimeout(r, 200));
     const pt = $('progressText').textContent || '';
     if (pt.startsWith('Saved:') || pt.includes("couldn't be saved directly")) break;
   }
+  check(name + ': ring hides when the download ends', $('downloadRing').hidden === true);
+  check(name + ': download button enabled again', $('downloadBtn').disabled === false);
   const progressText = $('progressText').textContent || '';
   const status = $('status').textContent || '';
   if (mode === 'always-fail') {
     check(name + ': fallback message after all attempts fail',
       progressText.includes("couldn't be saved directly") && /couldn't save your file directly/i.test(status),
       'progress=' + progressText + ' status=' + status);
-    check(name + ': tried 4 attempts', mediaCalls.length === 4, 'calls=' + mediaCalls.length);
+    check(name + ': tried 5 attempts', mediaCalls.length === 5, 'calls=' + mediaCalls.length);
   } else {
     check(name + ': download completes after the drop',
       progressText.startsWith('Saved:') && /download has started/i.test(status),
